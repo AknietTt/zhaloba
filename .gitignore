@@ -1,5 +1,4 @@
-# Секреты — никогда не коммитить
-autoparkbot/.env
+# autoparkbot/.env  # закомментировано — пушим в приватный репо
 autoparkbot/*.db
 autoparkbot/uploads/
 
