@@ -1,0 +1,37 @@
+# Секреты — никогда не коммитить
+autoparkbot/.env
+autoparkbot/*.db
+autoparkbot/uploads/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.venv/
+venv/
+
+# Node / Frontend
+front/node_modules/
+front/dist/
+front/.eslintcache
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code skills (локальные)
+.agents/
+skills-lock.json
+.claude/
+
+# Docker volumes
+data/

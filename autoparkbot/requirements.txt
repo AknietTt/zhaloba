@@ -1,0 +1,14 @@
+python-telegram-bot>=20.0
+pillow
+pytesseract
+pyzbar
+openpyxl
+xlrd
+pdf2image
+PyPDF2
+python-dotenv
+fastapi
+uvicorn[standard]
+python-multipart
+httpx
+itsdangerous

@@ -1,0 +1,9 @@
+front/node_modules
+front/dist
+**/__pycache__
+**/*.pyc
+**/*.pyo
+autoparkbot/uploads/
+autoparkbot/complaints.db
+.git
+autoparkbot/.env

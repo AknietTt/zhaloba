@@ -1,0 +1,40 @@
+version: '3.9'
+
+services:
+
+  backend:
+    build: ./autoparkbot
+    environment:
+      - DATA_DIR=/data
+    volumes:
+      - app_data:/data
+    env_file:
+      - ./autoparkbot/.env
+    networks:
+      - autopark
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  frontend:
+    build: ./front
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - autopark
+    restart: unless-stopped
+
+networks:
+  autopark:
+    driver: bridge
+
+volumes:
+  app_data:
+    driver: local
