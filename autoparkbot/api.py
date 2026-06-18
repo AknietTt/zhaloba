@@ -125,18 +125,19 @@ def list_complaints(
     bus: Optional[str] = None,
     search: Optional[str] = None,
     driver: Optional[str] = None,
+    category: Optional[str] = None,
 ):
     if page < 1 or page_size < 1:
         raise HTTPException(status_code=400, detail='page and page_size must be positive integers')
-    total = db.count_complaints(route=route, bus=bus, search=search, driver=driver)
+    total = db.count_complaints(route=route, bus=bus, search=search, driver=driver, category=category)
     offset = (page - 1) * page_size
-    rows = db.list_complaints(limit=page_size, offset=offset, route=route, bus=bus, search=search, driver=driver)
+    rows = db.list_complaints(limit=page_size, offset=offset, route=route, bus=bus, search=search, driver=driver, category=category)
     data = []
     for row in rows:
-        id_, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab = row
+        id_, r, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab, cat = row
         data.append({
             'id': id_,
-            'route': route,
+            'route': r,
             'comment': comment,
             'photo_path': photo_path,
             'user_id': user_id,
@@ -148,6 +149,7 @@ def list_complaints(
             'status': status,
             'driver_name': driver_name,
             'driver_tab': driver_tab,
+            'category': cat,
         })
     return {
         'page': page,

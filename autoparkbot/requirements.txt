@@ -12,3 +12,4 @@ uvicorn[standard]
 python-multipart
 httpx
 itsdangerous
+openai>=1.0

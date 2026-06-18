@@ -8,6 +8,31 @@ const STATUS_LABEL: Record<Status, string> = {
 };
 const ALL_STATUSES: Status[] = ['new', 'in_progress', 'replied', 'closed'];
 
+type CategoryCode = 'interval' | 'driver' | 'climate' | 'condition' | 'suggestion';
+
+const CATEGORY_LABEL: Record<CategoryCode, string> = {
+  interval:  '🕐 Нарушение интервала',
+  driver:    '👨‍✈️ На водителя',
+  climate:   '❄️ Кондиционер/Отопление',
+  condition: '🚌 Тех. состояние',
+  suggestion:'💌 Пожелание/Благодарность',
+};
+
+const CATEGORY_COLOR: Record<CategoryCode, string> = {
+  interval:  '#fef3c7',
+  driver:    '#fee2e2',
+  climate:   '#dbeafe',
+  condition: '#f0fdf4',
+  suggestion:'#fdf4ff',
+};
+const CATEGORY_TEXT: Record<CategoryCode, string> = {
+  interval:  '#92400e',
+  driver:    '#991b1b',
+  climate:   '#1e40af',
+  condition: '#166534',
+  suggestion:'#6b21a8',
+};
+
 interface Complaint {
   id: number; route: string; comment: string;
   photo_path: string | null; user_id: number;
@@ -15,6 +40,7 @@ interface Complaint {
   created_at: string; bus_info: string | null;
   bus_garage_number: string | null; status: Status;
   driver_name: string | null; driver_tab: string | null;
+  category: CategoryCode | null;
 }
 interface Message {
   id: number; sender_type: string; sender_name: string | null;
@@ -104,19 +130,22 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
   const [filterBus, setFilterBus] = useState('');
   const [filterDriver, setFilterDriver] = useState('');
   const [filterSearch, setFilterSearch] = useState('');
-  const dRoute  = useDebounce(filterRoute,  400);
-  const dBus    = useDebounce(filterBus,    400);
-  const dDriver = useDebounce(filterDriver, 400);
-  const dSearch = useDebounce(filterSearch, 400);
+  const [filterCategory, setFilterCategory] = useState('');
+  const dRoute    = useDebounce(filterRoute,    400);
+  const dBus      = useDebounce(filterBus,      400);
+  const dDriver   = useDebounce(filterDriver,   400);
+  const dSearch   = useDebounce(filterSearch,   400);
+  const dCategory = useDebounce(filterCategory, 0);
 
-  const fetchComplaints = useCallback(async (p: number, route: string, bus: string, driver: string, search: string) => {
+  const fetchComplaints = useCallback(async (p: number, route: string, bus: string, driver: string, search: string, category: string) => {
     setLoading(true); setFetchError('');
     try {
       const params = new URLSearchParams({ page: String(p), page_size: String(PAGE_SIZE) });
-      if (route.trim())  params.set('route', route.trim());
-      if (bus.trim())    params.set('bus', bus.trim());
-      if (driver.trim()) params.set('driver', driver.trim());
-      if (search.trim()) params.set('search', search.trim());
+      if (route.trim())    params.set('route', route.trim());
+      if (bus.trim())      params.set('bus', bus.trim());
+      if (driver.trim())   params.set('driver', driver.trim());
+      if (search.trim())   params.set('search', search.trim());
+      if (category.trim()) params.set('category', category.trim());
       const res = await fetch(`/complaints?${params}`);
       if (!res.ok) throw new Error(`Ошибка ${res.status}`);
       const json: ComplaintsResponse = await res.json();
@@ -131,8 +160,8 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { setPage(1); }, [dRoute, dBus, dDriver, dSearch]);
-  useEffect(() => { fetchComplaints(page, dRoute, dBus, dDriver, dSearch); }, [page, dRoute, dBus, dDriver, dSearch, fetchComplaints]);
+  useEffect(() => { setPage(1); }, [dRoute, dBus, dDriver, dSearch, dCategory]);
+  useEffect(() => { fetchComplaints(page, dRoute, dBus, dDriver, dSearch, dCategory); }, [page, dRoute, dBus, dDriver, dSearch, dCategory, fetchComplaints]);
 
   // ── Waybill ──
   const loadWaybill = async (id: number) => {
@@ -252,12 +281,21 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
           <input className="filter-input" placeholder="ФИО или таб. №" value={filterDriver} onChange={e => setFilterDriver(e.target.value)} />
         </div>
         <div className="filter-group">
+          <label className="filter-label">🏷 Категория</label>
+          <select className="filter-input" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+            <option value="">Все категории</option>
+            {(Object.entries(CATEGORY_LABEL) as [CategoryCode, string][]).map(([code, label]) => (
+              <option key={code} value={code}>{label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="filter-group">
           <label className="filter-label">🔍 Поиск</label>
           <input className="filter-input" placeholder="Текст жалобы…" value={filterSearch} onChange={e => setFilterSearch(e.target.value)} />
         </div>
-        {(filterRoute || filterBus || filterDriver || filterSearch) && (
+        {(filterRoute || filterBus || filterDriver || filterSearch || filterCategory) && (
           <button className="btn btn-outline btn-sm filter-clear"
-            onClick={() => { setFilterRoute(''); setFilterBus(''); setFilterDriver(''); setFilterSearch(''); }}>
+            onClick={() => { setFilterRoute(''); setFilterBus(''); setFilterDriver(''); setFilterSearch(''); setFilterCategory(''); }}>
             ✕ Сбросить
           </button>
         )}
@@ -267,7 +305,7 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
       {!loading && fetchError && (
         <div className="error-state">
           <span className="state-icon">⚠️</span><p>{fetchError}</p>
-          <button className="btn btn-primary btn-sm" onClick={() => fetchComplaints(page, dRoute, dBus, dDriver, dSearch)}>Повторить</button>
+          <button className="btn btn-primary btn-sm" onClick={() => fetchComplaints(page, dRoute, dBus, dDriver, dSearch, dCategory)}>Повторить</button>
         </div>
       )}
       {!loading && !fetchError && data?.items.length === 0 && (
@@ -300,6 +338,15 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
                   <div className="complaint-body">
                     <p className="complaint-comment">{c.comment}</p>
                     <div className="complaint-meta">
+                      {c.category && (
+                        <span className="meta-chip" style={{
+                          background: CATEGORY_COLOR[c.category] ?? '#f1f5f9',
+                          color: CATEGORY_TEXT[c.category] ?? '#475569',
+                          fontWeight: 600,
+                        }}>
+                          {CATEGORY_LABEL[c.category] ?? c.category}
+                        </span>
+                      )}
                       <span className="meta-chip"><span className="meta-key">От:</span> {userLabel(c)}</span>
                       {c.bus_garage_number && <span className="meta-chip"><span className="meta-key">Гараж №:</span> {c.bus_garage_number}</span>}
                       {c.bus_info && <span className="meta-chip"><span className="meta-key">Автобус:</span> {c.bus_info}</span>}

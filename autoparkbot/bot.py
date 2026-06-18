@@ -1,4 +1,6 @@
 import os
+import asyncio
+import random
 import logging
 from dotenv import load_dotenv
 from datetime import datetime
@@ -16,16 +18,26 @@ from telegram.ext import (
 
 import db
 import lookup
+import ai_reply
 
 load_dotenv()  # load variables from .env if present
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # States
-LANGUAGE, ROUTE, COMMENT, PHOTO, CONFIRM = range(5)
+LANGUAGE, CATEGORY, ROUTE, COMMENT, PHOTO, CONFIRM = range(6)
 
 # Кнопка меню — команда, чтобы не всплывать как обычный текст
 COMPLAINT_BTN = '📝 Жана шағым / Новая жалоба'
+
+# Категории обращений (code → {lang: label})
+CATEGORIES = [
+    ('interval',   {'ru': '🕐 Нарушение интервала движения',   'kk': '🕐 Қозғалыс интервалын бұзу',        'en': '🕐 Schedule violation'}),
+    ('driver',     {'ru': '👨‍✈️ На водителя',                    'kk': '👨‍✈️ Жүргізуші туралы',               'en': '👨‍✈️ Driver complaint'}),
+    ('climate',    {'ru': '❄️ Кондиционер / Отопление',         'kk': '❄️ Кондиционер / Жылыту',            'en': '❄️ AC / Heating'}),
+    ('condition',  {'ru': '🚌 Санитарное / Тех. состояние',     'kk': '🚌 Автобустың техникалық жағдайы',   'en': '🚌 Bus condition'}),
+    ('suggestion', {'ru': '💌 Пожелание / Благодарность',       'kk': '💌 Тілек / Алғыс',                   'en': '💌 Suggestion / Thanks'}),
+]
 
 # Multilingual strings
 STRINGS = {
@@ -34,13 +46,14 @@ STRINGS = {
         'english': '🇬🇧 English',
         'russian': '🇷🇺 Русский',
         'kazakh': '🇰🇿 Қазақша',
+        'choose_category': 'Choose complaint category:',
         'enter_route': 'Enter the route number (e.g., 74, 36, 504):',
         'enter_comment': 'Describe your complaint:',
         'send_receipt': 'Send a photo or PDF of your payment receipt (or tap Skip):',
         'skip_receipt': '⏭ Skip',
         'found_number': '🔍 Transport number found: {number}',
         'found_bus': '\n🚌 Bus: {bus}',
-        'confirm': '📋 Confirm complaint?\n\n🚏 Route: {route}\n💬 Comment: {comment}',
+        'confirm': '📋 Confirm complaint?\n\n🚏 Route: {route}\n🏷 Category: {category}\n💬 Comment: {comment}',
         'confirm_yes': '✅ Submit',
         'confirm_no': '❌ Cancel',
         'saved': '✅ Your complaint has been submitted. Thank you!',
@@ -51,13 +64,14 @@ STRINGS = {
         'english': '🇬🇧 English',
         'russian': '🇷🇺 Русский',
         'kazakh': '🇰🇿 Қазақша',
+        'choose_category': 'Выберите категорию обращения:',
         'enter_route': 'Введите номер маршрута (например: 74, 36, 504):',
         'enter_comment': 'Опишите вашу жалобу:',
         'send_receipt': 'Отправьте фото или PDF чека об оплате (или нажмите Пропустить):',
         'skip_receipt': '⏭ Пропустить',
         'found_number': '🔍 Найден номер транспорта: {number}',
         'found_bus': '\n🚌 Автобус: {bus}',
-        'confirm': '📋 Подтвердить жалобу?\n\n🚏 Маршрут: {route}\n💬 Комментарий: {comment}',
+        'confirm': '📋 Подтвердить жалобу?\n\n🚏 Маршрут: {route}\n🏷 Категория: {category}\n💬 Комментарий: {comment}',
         'confirm_yes': '✅ Подтвердить',
         'confirm_no': '❌ Отмена',
         'saved': '✅ Жалоба принята. Спасибо!',
@@ -68,19 +82,30 @@ STRINGS = {
         'english': '🇬🇧 English',
         'russian': '🇷🇺 Русский',
         'kazakh': '🇰🇿 Қазақша',
+        'choose_category': 'Өтініш санатын таңдаңыз:',
         'enter_route': 'Маршрут нөмірін енгізіңіз (мысалы: 74, 36, 504):',
         'enter_comment': 'Пікіріңізді енгізіңіз:',
         'send_receipt': 'Төлем чегінің фотосын немесе PDF файлын жіберіңіз (немесе Өткізу басыңыз):',
         'skip_receipt': '⏭ Өткізу',
         'found_number': '🔍 Көлік нөмірі табылды: {number}',
         'found_bus': '\n🚌 Автобус: {bus}',
-        'confirm': '📋 Шағымды растайсыз ба?\n\n🚏 Маршрут: {route}\n💬 Шағым: {comment}',
+        'confirm': '📋 Шағымды растайсыз ба?\n\n🚏 Маршрут: {route}\n🏷 Санат: {category}\n💬 Шағым: {comment}',
         'confirm_yes': '✅ Растау',
         'confirm_no': '❌ Бас тарту',
         'saved': '✅ Шағымыңыз қабылданды. Рахмет!',
         'cancelled': '❌ Бас тартылды.',
     }
 }
+
+
+def _category_label(context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Вернуть человекочитаемую метку категории на языке пользователя."""
+    cat_code = context.user_data.get('category', '')
+    lang = context.user_data.get('language', 'en')
+    for code, labels in CATEGORIES:
+        if code == cat_code:
+            return labels.get(lang, labels['en'])
+    return cat_code
 
 
 def _lang(ctx: ContextTypes.DEFAULT_TYPE, key: str, **kwargs):
@@ -127,15 +152,30 @@ async def complaint_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Set language and proceed to entering route."""
+    """Set language and proceed to category selection."""
     query = update.callback_query
     await query.answer()
-    
-    # Map callback_data to language code
+
     lang_map = {'lang_en': 'en', 'lang_ru': 'ru', 'lang_kk': 'kk'}
     lang = lang_map.get(query.data, 'en')
     context.user_data['language'] = lang
-    
+
+    keyboard = [
+        [InlineKeyboardButton(labels[lang], callback_data=f'cat_{code}')]
+        for code, labels in CATEGORIES
+    ]
+    await query.edit_message_text(
+        _lang(context, 'choose_category'),
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+    return CATEGORY
+
+
+async def category_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Save category and proceed to route."""
+    query = update.callback_query
+    await query.answer()
+    context.user_data['category'] = query.data[4:]  # strip 'cat_'
     await query.edit_message_text(_lang(context, 'enter_route'))
     return ROUTE
 
@@ -211,11 +251,12 @@ async def skip_photo_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def _show_confirm(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     route = context.user_data.get('route')
     comment = context.user_data.get('comment')
+    category = _category_label(context)
     keyboard = [
         [InlineKeyboardButton(_lang(context, 'confirm_yes'), callback_data='confirm_yes')],
         [InlineKeyboardButton(_lang(context, 'confirm_no'), callback_data='confirm_no')],
     ]
-    msg = _lang(context, 'confirm', route=route, comment=comment)
+    msg = _lang(context, 'confirm', route=route, comment=comment, category=category)
     query = getattr(update_or_query, 'callback_query', None)
     if query is not None:
         await query.edit_message_text(
@@ -234,17 +275,57 @@ async def _show_confirm(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+async def _send_ai_reply_delayed(
+    bot,
+    complaint_id: int,
+    user_id: int,
+    category: str,
+    route: str,
+    comment: str,
+    lang: str,
+):
+    """Отправляет AI-ответ через случайную задержку 2–10 минут.
+    Запускается как фоновая задача — не блокирует бота.
+    """
+    delay = random.randint(2 * 60, 10 * 60)
+    logger.info(f'AI-ответ по жалобе #{complaint_id} через {delay} сек.')
+    await asyncio.sleep(delay)
+
+    reply_text = await ai_reply.generate_auto_reply(
+        category=category,
+        route=route,
+        comment=comment,
+        lang=lang,
+    )
+    if reply_text:
+        db.save_message(
+            complaint_id=complaint_id,
+            sender_id=0,
+            sender_type='admin',
+            sender_name='AutoPark AI',
+            text=reply_text,
+        )
+        try:
+            await bot.send_message(chat_id=user_id, text=reply_text)
+            logger.info(f'AI-ответ отправлен пользователю {user_id} по жалобе #{complaint_id}')
+        except Exception as e:
+            logger.error(f'Ошибка отправки AI-ответа: {e}')
+
+
 async def confirm_complaint(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     if query.data == 'confirm_yes':
-        route = context.user_data.get('route')
+        route   = context.user_data.get('route')
         comment = context.user_data.get('comment')
         file_path = context.user_data.get('file_path')
-        bus_info = context.user_data.get('bus_info')
-        user = update.effective_user
+        bus_info  = context.user_data.get('bus_info')
+        category  = context.user_data.get('category')
+        lang      = context.user_data.get('language', 'ru')
+        user      = update.effective_user
         created_at = datetime.utcnow().isoformat()
-        db.save_complaint(
+
+        complaint_id = db.save_complaint(
             route=route,
             comment=comment,
             photo_path=file_path,
@@ -254,8 +335,21 @@ async def confirm_complaint(update: Update, context: ContextTypes.DEFAULT_TYPE):
             bus_garage_number=(context.user_data.get('bus_entry') or {}).get('garage_number'),
             username=user.username or '',
             user_full_name=user.full_name or '',
+            category=category,
         )
         await query.edit_message_text(_lang(context, 'saved'))
+
+        # Авто-ответ ИИ запускается фоново — хендлер сразу возвращает управление
+        if category in ai_reply.AUTO_REPLY_CATEGORIES and complaint_id:
+            asyncio.create_task(_send_ai_reply_delayed(
+                bot=context.bot,
+                complaint_id=complaint_id,
+                user_id=user.id,
+                category=category,
+                route=route or '',
+                comment=comment or '',
+                lang=lang,
+            ))
     else:
         await query.edit_message_text(_lang(context, 'cancelled'))
     context.user_data.clear()
@@ -288,7 +382,7 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Пропустить если пользователь сейчас подаёт жалобу (есть активные ключи сессии)
-    conv_keys = {'language', 'route', 'comment', 'file_path'}
+    conv_keys = {'language', 'category', 'route', 'comment', 'file_path'}
     if any(k in context.user_data for k in conv_keys):
         return
 
@@ -397,6 +491,9 @@ def main():
         states={
             LANGUAGE: [
                 CallbackQueryHandler(set_language, pattern='^lang_(en|ru|kk)$'),
+            ],
+            CATEGORY: [
+                CallbackQueryHandler(category_selected, pattern='^cat_(interval|driver|climate|condition|suggestion)$'),
             ],
             ROUTE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, route_received),

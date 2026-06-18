@@ -52,6 +52,7 @@ def init_db(path: str | None = None):
         ('status', "TEXT DEFAULT 'new'"),
         ('driver_name', 'TEXT'),
         ('driver_tab', 'TEXT'),
+        ('category', 'TEXT'),
     ]:
         if col not in cols:
             try:
@@ -82,6 +83,7 @@ def save_complaint(
     bus_garage_number: str | None = None,
     username: str | None = None,
     user_full_name: str | None = None,
+    category: str | None = None,
     path: str | None = None,
 ):
     p = path or DB_PATH
@@ -89,9 +91,9 @@ def save_complaint(
     cur = conn.cursor()
     cur.execute(
         """INSERT INTO complaints
-           (route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')""",
-        (route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name),
+           (route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, category)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)""",
+        (route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, category),
     )
     new_id = cur.lastrowid
     conn.commit()
@@ -116,6 +118,7 @@ def list_complaints(
     bus: str | None = None,
     search: str | None = None,
     driver: str | None = None,
+    category: str | None = None,
     path: str | None = None,
 ):
     p = path or DB_PATH
@@ -131,12 +134,15 @@ def list_complaints(
     if driver:
         conditions.append("(driver_name LIKE ? OR driver_tab LIKE ?)")
         params.extend([f"%{driver}%", f"%{driver}%"])
+    if category:
+        conditions.append("category = ?")
+        params.append(category)
     if search:
         conditions.append("(comment LIKE ? OR username LIKE ? OR user_full_name LIKE ? OR bus_info LIKE ?)")
         params.extend([f"%{search}%"] * 4)
     where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
     cur.execute(
-        f"""SELECT id, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab
+        f"""SELECT id, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab, category
            FROM complaints{where} ORDER BY id DESC LIMIT ? OFFSET ?""",
         params + [limit, offset],
     )
@@ -150,7 +156,7 @@ def get_complaint_by_id(complaint_id: int, path: str | None = None) -> dict | No
     conn = sqlite3.connect(p)
     cur = conn.cursor()
     cur.execute(
-        """SELECT id, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab
+        """SELECT id, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab, category
            FROM complaints WHERE id = ?""",
         (complaint_id,),
     )
@@ -158,7 +164,7 @@ def get_complaint_by_id(complaint_id: int, path: str | None = None) -> dict | No
     conn.close()
     if not row:
         return None
-    id_, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab = row
+    id_, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab, category = row
     return {
         'id': id_,
         'route': route,
@@ -173,6 +179,7 @@ def get_complaint_by_id(complaint_id: int, path: str | None = None) -> dict | No
         'status': status,
         'driver_name': driver_name,
         'driver_tab': driver_tab,
+        'category': category,
     }
 
 
@@ -181,6 +188,7 @@ def count_complaints(
     bus: str | None = None,
     search: str | None = None,
     driver: str | None = None,
+    category: str | None = None,
     path: str | None = None,
 ) -> int:
     p = path or DB_PATH
@@ -196,6 +204,9 @@ def count_complaints(
     if driver:
         conditions.append("(driver_name LIKE ? OR driver_tab LIKE ?)")
         params.extend([f"%{driver}%", f"%{driver}%"])
+    if category:
+        conditions.append("category = ?")
+        params.append(category)
     if search:
         conditions.append("(comment LIKE ? OR username LIKE ? OR user_full_name LIKE ? OR bus_info LIKE ?)")
         params.extend([f"%{search}%"] * 4)
@@ -268,7 +279,7 @@ def get_latest_complaint_for_user(user_id: int, path: str | None = None) -> dict
     cur = conn.cursor()
     cur.execute(
         """SELECT id, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number,
-                  username, user_full_name, status, driver_name, driver_tab
+                  username, user_full_name, status, driver_name, driver_tab, category
            FROM complaints WHERE user_id = ? AND status != 'closed'
            ORDER BY id DESC LIMIT 1""",
         (user_id,),
@@ -277,7 +288,7 @@ def get_latest_complaint_for_user(user_id: int, path: str | None = None) -> dict
     conn.close()
     if not row:
         return None
-    id_, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab = row
+    id_, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab, category = row
     return {
         'id': id_, 'route': route, 'comment': comment,
         'photo_path': photo_path, 'user_id': user_id,
@@ -285,6 +296,7 @@ def get_latest_complaint_for_user(user_id: int, path: str | None = None) -> dict
         'bus_garage_number': bus_garage_number,
         'username': username, 'user_full_name': user_full_name,
         'status': status, 'driver_name': driver_name, 'driver_tab': driver_tab,
+        'category': category,
     }
 
 
