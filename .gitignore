@@ -1,4 +1,4 @@
-# autoparkbot/.env  # закомментировано — пушим в приватный репо
+autoparkbot/.env
 autoparkbot/*.db
 autoparkbot/uploads/
 
