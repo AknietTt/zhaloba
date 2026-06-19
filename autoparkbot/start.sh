@@ -7,4 +7,7 @@ python -m uvicorn api:app --host 0.0.0.0 --port 8000 &
 echo "Starting Telegram bot..."
 python bot.py &
 
+echo "Starting Email reader..."
+python email_reader.py &
+
 wait

@@ -53,6 +53,7 @@ def init_db(path: str | None = None):
         ('driver_name', 'TEXT'),
         ('driver_tab', 'TEXT'),
         ('category', 'TEXT'),
+        ('language', 'TEXT'),
     ]:
         if col not in cols:
             try:
@@ -84,6 +85,7 @@ def save_complaint(
     username: str | None = None,
     user_full_name: str | None = None,
     category: str | None = None,
+    language: str | None = None,
     path: str | None = None,
 ):
     p = path or DB_PATH
@@ -91,9 +93,9 @@ def save_complaint(
     cur = conn.cursor()
     cur.execute(
         """INSERT INTO complaints
-           (route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, category)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)""",
-        (route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, category),
+           (route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, category, language)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)""",
+        (route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, category, language),
     )
     new_id = cur.lastrowid
     conn.commit()
@@ -156,7 +158,7 @@ def get_complaint_by_id(complaint_id: int, path: str | None = None) -> dict | No
     conn = sqlite3.connect(p)
     cur = conn.cursor()
     cur.execute(
-        """SELECT id, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab, category
+        """SELECT id, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab, category, language
            FROM complaints WHERE id = ?""",
         (complaint_id,),
     )
@@ -164,22 +166,14 @@ def get_complaint_by_id(complaint_id: int, path: str | None = None) -> dict | No
     conn.close()
     if not row:
         return None
-    id_, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab, category = row
+    id_, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab, category, language = row
     return {
-        'id': id_,
-        'route': route,
-        'comment': comment,
-        'photo_path': photo_path,
-        'user_id': user_id,
-        'created_at': created_at,
-        'bus_info': bus_info,
-        'bus_garage_number': bus_garage_number,
-        'username': username,
-        'user_full_name': user_full_name,
-        'status': status,
-        'driver_name': driver_name,
-        'driver_tab': driver_tab,
-        'category': category,
+        'id': id_, 'route': route, 'comment': comment,
+        'photo_path': photo_path, 'user_id': user_id, 'created_at': created_at,
+        'bus_info': bus_info, 'bus_garage_number': bus_garage_number,
+        'username': username, 'user_full_name': user_full_name, 'status': status,
+        'driver_name': driver_name, 'driver_tab': driver_tab,
+        'category': category, 'language': language,
     }
 
 
@@ -215,6 +209,29 @@ def count_complaints(
     total = cur.fetchone()[0]
     conn.close()
     return total
+
+
+def update_complaint_bus(
+    complaint_id: int,
+    bus_info: str | None = None,
+    bus_garage_number: str | None = None,
+    path: str | None = None,
+):
+    """Обновить данные автобуса в жалобе (bus_info, bus_garage_number)."""
+    p = path or DB_PATH
+    conn = sqlite3.connect(p)
+    cur = conn.cursor()
+    updates, params = [], []
+    if bus_info is not None:
+        updates.append('bus_info = ?')
+        params.append(bus_info)
+    if bus_garage_number is not None:
+        updates.append('bus_garage_number = ?')
+        params.append(bus_garage_number)
+    if updates:
+        cur.execute(f"UPDATE complaints SET {', '.join(updates)} WHERE id = ?", params + [complaint_id])
+        conn.commit()
+    conn.close()
 
 
 def update_driver_info(complaint_id: int, driver_name: str, driver_tab: str, path: str | None = None):
@@ -279,7 +296,7 @@ def get_latest_complaint_for_user(user_id: int, path: str | None = None) -> dict
     cur = conn.cursor()
     cur.execute(
         """SELECT id, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number,
-                  username, user_full_name, status, driver_name, driver_tab, category
+                  username, user_full_name, status, driver_name, driver_tab, category, language
            FROM complaints WHERE user_id = ? AND status != 'closed'
            ORDER BY id DESC LIMIT 1""",
         (user_id,),
@@ -288,7 +305,7 @@ def get_latest_complaint_for_user(user_id: int, path: str | None = None) -> dict
     conn.close()
     if not row:
         return None
-    id_, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab, category = row
+    id_, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab, category, language = row
     return {
         'id': id_, 'route': route, 'comment': comment,
         'photo_path': photo_path, 'user_id': user_id,
@@ -296,7 +313,7 @@ def get_latest_complaint_for_user(user_id: int, path: str | None = None) -> dict
         'bus_garage_number': bus_garage_number,
         'username': username, 'user_full_name': user_full_name,
         'status': status, 'driver_name': driver_name, 'driver_tab': driver_tab,
-        'category': category,
+        'category': category, 'language': language,
     }
 
 

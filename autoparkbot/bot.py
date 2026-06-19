@@ -18,7 +18,9 @@ from telegram.ext import (
 
 import db
 import lookup
+import onec
 import ai_reply
+import conversation_ai
 
 load_dotenv()  # load variables from .env if present
 logging.basicConfig(level=logging.INFO)
@@ -95,6 +97,34 @@ STRINGS = {
         'saved': '✅ Шағымыңыз қабылданды. Рахмет!',
         'cancelled': '❌ Бас тартылды.',
     }
+}
+
+
+_BUS_FOUND_ACK = {
+    'ru': "✅ Данные получены, спасибо! Автобус определён, жалоба передана в работу.\nОтвет поступит в течение 3 рабочих дней.",
+    'kk': "✅ Мәліметтер алынды, рахмет! Автобус анықталды, шағым өңдеуге жіберілді.\nЖауап 3 жұмыс күні ішінде келеді.",
+    'en': "✅ Got it, thank you! The bus has been identified and your complaint is now in review.\nYou'll receive a response within 3 business days.",
+}
+
+_BUS_NOT_FOUND_ACK = {
+    'ru': "✅ Данные записаны, спасибо! Жалоба передана в работу.\nОтвет поступит в течение 3 рабочих дней.",
+    'kk': "✅ Мәліметтер жазылды, рахмет! Шағым өңдеуге жіберілді.\nЖауап 3 жұмыс күні ішінде келеді.",
+    'en': "✅ Details noted, thank you! Your complaint has been forwarded for review.\nYou'll receive a response within 3 business days.",
+}
+
+_RECEIPT_ACK = {
+    'ru': (
+        "✅ Чек получен! По нему мы определим автобус и водителя.\n"
+        "Жалоба будет рассмотрена в течение 3 рабочих дней."
+    ),
+    'kk': (
+        "✅ Чек алынды! Ол арқылы автобус пен жүргізушіні анықтаймыз.\n"
+        "Шағымыңыз 3 жұмыс күні ішінде қаралады."
+    ),
+    'en': (
+        "✅ Receipt received! We'll use it to identify the bus and driver.\n"
+        "Your complaint will be reviewed within 3 business days."
+    ),
 }
 
 
@@ -275,6 +305,22 @@ async def _show_confirm(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+async def _start_clarification(bot, user_id: int, complaint_id: int, lang: str):
+    """Отправляет первое сообщение уточнения сразу после подачи жалобы."""
+    msg = conversation_ai.INITIAL_MSG.get(lang, conversation_ai.INITIAL_MSG['ru'])
+    db.save_message(
+        complaint_id=complaint_id,
+        sender_id=0,
+        sender_type='admin',
+        sender_name='AutoPark AI',
+        text=msg,
+    )
+    try:
+        await bot.send_message(chat_id=user_id, text=msg, parse_mode='Markdown')
+    except Exception as e:
+        logger.error(f'Ошибка отправки уточнения: {e}')
+
+
 async def _send_ai_reply_delayed(
     bot,
     complaint_id: int,
@@ -325,6 +371,8 @@ async def confirm_complaint(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user      = update.effective_user
         created_at = datetime.utcnow().isoformat()
 
+        bus_garage = (context.user_data.get('bus_entry') or {}).get('garage_number')
+
         complaint_id = db.save_complaint(
             route=route,
             comment=comment,
@@ -332,24 +380,41 @@ async def confirm_complaint(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_id=user.id,
             created_at=created_at,
             bus_info=bus_info,
-            bus_garage_number=(context.user_data.get('bus_entry') or {}).get('garage_number'),
+            bus_garage_number=bus_garage,
             username=user.username or '',
             user_full_name=user.full_name or '',
             category=category,
+            language=lang,
         )
         await query.edit_message_text(_lang(context, 'saved'))
 
-        # Авто-ответ ИИ запускается фоново — хендлер сразу возвращает управление
-        if category in ai_reply.AUTO_REPLY_CATEGORIES and complaint_id:
-            asyncio.create_task(_send_ai_reply_delayed(
-                bot=context.bot,
-                complaint_id=complaint_id,
-                user_id=user.id,
-                category=category,
-                route=route or '',
-                comment=comment or '',
-                lang=lang,
-            ))
+        if complaint_id:
+            if file_path:
+                # Клиент приложил чек/фото — в нём есть бортовой номер, уточнять не нужно
+                ack = _RECEIPT_ACK.get(lang, _RECEIPT_ACK['ru'])
+                await context.bot.send_message(chat_id=user.id, text=ack)
+            elif conversation_ai.should_clarify({
+                'category': category,
+                'bus_garage_number': bus_garage,
+                'bus_info': bus_info,
+            }):
+                # Клиент нажал «Пропустить» — запускаем диалог уточнения
+                asyncio.create_task(_start_clarification(
+                    bot=context.bot,
+                    user_id=user.id,
+                    complaint_id=complaint_id,
+                    lang=lang,
+                ))
+            elif category in ai_reply.AUTO_REPLY_CATEGORIES:
+                asyncio.create_task(_send_ai_reply_delayed(
+                    bot=context.bot,
+                    complaint_id=complaint_id,
+                    user_id=user.id,
+                    category=category,
+                    route=route or '',
+                    comment=comment or '',
+                    lang=lang,
+                ))
     else:
         await query.edit_message_text(_lang(context, 'cancelled'))
     context.user_data.clear()
@@ -439,8 +504,88 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     logger.info(f"Сообщение от {user.id} сохранено в жалобу #{complaint_id}")
+
+    lang = complaint.get('language', 'ru')
+
+    # ── Попытка извлечь идентификатор автобуса и запросить ПЛ из 1С ──────────
+    if conversation_ai.should_clarify(complaint):
+        identifier = conversation_ai.extract_bus_identifier(text or '')
+
+        if identifier:
+            id_type  = identifier['type']
+            id_value = identifier['value']
+            logger.info(f"Идентификатор автобуса из диалога: {id_type}={id_value}")
+
+            # Поиск в Excel-таблице
+            bus_entry = None
+            if id_type in ('board', 'garage'):
+                bus_entry = lookup.find_bus_entry(id_value)
+            elif id_type == 'plate':
+                bus_entry = lookup.find_bus_by_plate(id_value)
+
+            garage_number = None
+
+            if id_type == 'garage':
+                # Гаражный → сразу в 1С, Excel не нужен
+                garage_number = id_value
+                db.update_complaint_bus(complaint_id, bus_garage_number=garage_number)
+
+            elif id_type in ('board', 'plate'):
+                # Бортовой / гос. номер → Excel чтобы найти гаражный
+                if id_type == 'board':
+                    bus_entry = lookup.find_bus_entry(id_value)
+                else:
+                    bus_entry = lookup.find_bus_by_plate(id_value)
+
+                if bus_entry:
+                    garage_number = bus_entry['garage_number']
+                    db.update_complaint_bus(
+                        complaint_id,
+                        bus_info=lookup.format_bus_info(bus_entry),
+                        bus_garage_number=garage_number,
+                    )
+                else:
+                    # Не нашли в Excel — сохраняем то что есть
+                    db.update_complaint_bus(complaint_id, bus_info=f"{id_type}: {id_value}")
+
+            # Запрос ПЛ из 1С по гаражному номеру
+            if garage_number:
+                try:
+                    waybill = await onec.get_waybill_by_garage_number(garage_number)
+                    if waybill.get('status') == 'ok':
+                        body = waybill.get('body')
+                        entry_data = (body[0] if isinstance(body, list) and body
+                                      else body if isinstance(body, dict) else {})
+                        driver = entry_data.get('Driver', {}) if isinstance(entry_data, dict) else {}
+                        if driver.get('FIO'):
+                            db.update_driver_info(
+                                complaint_id, driver['FIO'], driver.get('TabNo', ''))
+                            logger.info(f"Водитель #{complaint_id}: {driver['FIO']}")
+                except Exception as e:
+                    logger.error(f'Ошибка запроса ПЛ из 1С: {e}')
+
+            ack = _BUS_FOUND_ACK.get(lang, _BUS_FOUND_ACK['ru'])
+
+            db.save_message(complaint_id=complaint_id, sender_id=0, sender_type='admin',
+                            sender_name='AutoPark AI', text=ack)
+            await message.reply_text(ack)
+            return
+
+        # Идентификатор не найден — продолжаем AI-диалог
+        ai_response = await conversation_ai.generate_reply(
+            complaint=complaint,
+            new_message=text,
+            has_file=bool(file_path),
+            lang=lang,
+        )
+        if ai_response:
+            db.save_message(complaint_id=complaint_id, sender_id=0, sender_type='admin',
+                            sender_name='AutoPark AI', text=ai_response)
+            await message.reply_text(ai_response, parse_mode='Markdown')
+            return
+
     await message.reply_text(
-        f"✅ Ваше сообщение получено по жалобе #{complaint_id} (маршрут {complaint['route']})."
+        f"✅ Ваше сообщение получено по жалобе #{complaint_id}."
     )
 
 

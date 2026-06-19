@@ -192,6 +192,39 @@ def format_bus_info(entry: dict[str, str] | None) -> Optional[str]:
     return entry.get('raw')
 
 
+def find_bus_by_plate(plate: str) -> Optional[dict[str, str]]:
+    """Search bus by license plate (col 4 in XLS)."""
+    import re as _re
+    plate_norm = _re.sub(r'[\s\-]', '', plate).upper()
+    # Normalize Cyrillic А/В/Е/К/М/Н/О/Р/С/Т/Х to Latin lookalikes for comparison
+    _cyr_to_lat = str.maketrans('АВЕКМНОРСТХ', 'ABEKMNOPCTX')
+    plate_norm_lat = plate_norm.translate(_cyr_to_lat)
+
+    try:
+        rows = _load_bus_rows()
+        for row in rows:
+            if not row or len(row) < 5:
+                continue
+            raw_plate = str(row[4]).strip() if row[4] else ''
+            rp_norm = _re.sub(r'[\s\-]', '', raw_plate).upper().translate(_cyr_to_lat)
+            if rp_norm == plate_norm_lat:
+                garage = str(row[1]).strip() if row[1] is not None else ''
+                make   = str(row[3]).strip() if len(row) > 3 and row[3] else ''
+                name   = str(row[2]).strip() if len(row) > 2 and row[2] else ''
+                col    = str(row[5]).strip() if len(row) > 5 and row[5] else ''
+                return {
+                    'garage_number': garage,
+                    'name': name,
+                    'make': make,
+                    'plate': raw_plate,
+                    'column': col,
+                    'raw': f"{garage} | {name} | {make} | {raw_plate} | {col}",
+                }
+    except Exception:
+        pass
+    return None
+
+
 def find_bus(number: str, excel_path: str = 'qr_codes.xlsx') -> Optional[str]:
     entry = find_bus_entry(number, excel_path=excel_path)
     return format_bus_info(entry) if entry else None

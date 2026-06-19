@@ -10,6 +10,7 @@ load_dotenv()
 import db
 import lookup
 import onec
+import conversation_ai
 import httpx
 import itsdangerous
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request, Response
@@ -167,6 +168,39 @@ async def get_complaint_waybill(complaint_id: int):
         raise HTTPException(status_code=404, detail='Жалоба не найдена')
 
     garage_number = complaint.get('bus_garage_number')
+
+    # Если гаражный номер не сохранён — ищем в сообщениях чата
+    if not garage_number:
+        messages = db.get_messages_for_complaint(complaint_id, limit=50)
+        for msg in messages:
+            if msg[3] != 'user':
+                continue
+            identifier = conversation_ai.extract_bus_identifier(msg[5] or '')
+            if not identifier:
+                continue
+            id_type, id_value = identifier['type'], identifier['value']
+            if id_type == 'garage':
+                # Гаражный → нормализуем и сразу в 1С
+                garage_number = conversation_ai.normalize_garage(id_value)
+                db.update_complaint_bus(complaint_id, bus_garage_number=garage_number)
+                break
+            elif id_type == 'board':
+                bus_entry = lookup.find_bus_entry(id_value)
+                if bus_entry:
+                    garage_number = bus_entry['garage_number']
+                    db.update_complaint_bus(complaint_id,
+                                            bus_info=lookup.format_bus_info(bus_entry),
+                                            bus_garage_number=garage_number)
+                    break
+            elif id_type == 'plate':
+                bus_entry = lookup.find_bus_by_plate(id_value)
+                if bus_entry:
+                    garage_number = bus_entry['garage_number']
+                    db.update_complaint_bus(complaint_id,
+                                            bus_info=lookup.format_bus_info(bus_entry),
+                                            bus_garage_number=garage_number)
+                    break
+
     if not garage_number:
         raise HTTPException(status_code=400, detail='Гаражный номер не найден в жалобе')
 
