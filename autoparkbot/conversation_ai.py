@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 MAX_AI_MESSAGES = 4
 
 
-# ── Первое сообщение после подачи жалобы ────────────────────────────────────
+# ── Первое сообщение после подачи обращения ─────────────────────────────────
 
 INITIAL_MSG = {
     'ru': (
@@ -42,6 +42,36 @@ INITIAL_MSG = {
         "🔢 *Board number* (digits on the windshield under the QR code)\n"
         "🔢 *Garage number* (usually starts with 'A', e.g. A1004)\n\n"
         "If you don't remember any — just write 'don't remember' 👍"
+    ),
+}
+
+INITIAL_MSG_LOST = {
+    'ru': (
+        "Жаль, что вы потеряли вещь 😔\n\n"
+        "Чтобы найти водителя того автобуса, пришлите *один* из номеров:\n\n"
+        "🔢 *Гаражный номер* (например А1004)\n"
+        "🔢 *Бортовой номер* (цифры на лобовом стекле под QR-кодом)\n"
+        "🔢 *Гос. номер* (на номерном знаке)\n\n"
+        "💡 Если оплачивали проездной — в чеке есть бортовой номер автобуса\n\n"
+        "Если ничего не помните — напишите «не помню»"
+    ),
+    'kk': (
+        "Затыңызды жоғалтқаныңызға өкінемін 😔\n\n"
+        "Сол автобустың жүргізушісін табу үшін мына нөмірлердің *біреуін* жіберіңіз:\n\n"
+        "🔢 *Гараж нөмірі* (мысалы А1004)\n"
+        "🔢 *Бортовой нөмір* (алдыңғы шынының QR-коды астындағы цифрлар)\n"
+        "🔢 *Мемлекеттік нөмір* (мемлекеттік белгідегі)\n\n"
+        "💡 Жол ақысын төлесеңіз — чекте автобустың бортовой нөмірі болады\n\n"
+        "Ештеңе есіңізде жоқ болса — «есімде жоқ» деп жазыңыз"
+    ),
+    'en': (
+        "Sorry to hear you lost something 😔\n\n"
+        "To find the driver of that bus, please provide *one* of these:\n\n"
+        "🔢 *Garage number* (e.g. A1004)\n"
+        "🔢 *Board number* (digits on the windshield under the QR code)\n"
+        "🔢 *License plate* (on the number plate)\n\n"
+        "💡 If you paid by card, your receipt contains the bus board number\n\n"
+        "If you don't remember — just write 'don't remember'"
     ),
 }
 
@@ -98,6 +128,60 @@ Rules:
   Then ask: 'If you paid for the ride, your receipt contains the bus board number — could you share it?'
 - If client has neither a number nor a receipt — say: 'Unfortunately, without a bus identifier we cannot determine the specific driver. Your complaint will be registered, but we won't be able to link it to a specific employee.' Then close the dialogue.
 - If client sends a photo or receipt — confirm receipt and close
+- Never invent numbers
+- Write only in English""",
+}
+
+_SYSTEM_LOST = {
+    'ru': """Ты — оператор поддержки городского автопарка Астаны.
+Пассажир потерял вещь в автобусе. Твоя задача — помочь найти водителя того автобуса.
+
+Для этого нужен ОДИН любой номер автобуса:
+- Гаражный номер (например: А1004)
+- Бортовой номер (цифры на лобовом стекле под QR-кодом)
+- Гос. номер (номерной знак)
+
+Правила:
+- Отвечай коротко — 1–2 предложения
+- Как только клиент дал номер — подтверди и сообщи что водитель установлен
+- Если клиент не помнит номер — объясни: «Без номера автобуса найти конкретного водителя сложно, так как на линии работает много автобусов.»
+  Затем спроси: «Если вы оплачивали проезд картой или телефоном — в чеке есть бортовой номер автобуса. Можете его прислать?»
+- Если нет ни номера ни чека — скажи: «К сожалению, без номера автобуса мы не можем точно установить водителя. Обратитесь к диспетчеру автопарка лично.»
+- Если клиент прислал фото или чек — подтверди получение
+- Никогда не придумывай номера
+- Пиши только по-русски""",
+
+    'kk': """Сіз — Астана қалалық автопаркінің қолдау операторысыз.
+Жолаушы автобуста зат жоғалтты. Сіздің міндетіңіз — сол автобустың жүргізушісін табуға көмектесу.
+
+Ол үшін кез келген БІР нөмір қажет:
+- Гараж нөмірі (мысалы: А1004)
+- Бортовой нөмір (алдыңғы шынының QR-коды астындағы цифрлар)
+- Мемлекеттік нөмір
+
+Ережелер:
+- Қысқаша жауап беріңіз — 1–2 сөйлем
+- Клиент нөмір берсе — растап, жүргізуші анықталды деп хабарлаңыз
+- Нөмірді есіне түсіре алмаса — түсіндіріңіз: «Нөмірсіз нақты жүргізушіні табу қиын, себебі желіде көп автобус жүреді.»
+  Содан кейін: «Карта немесе телефонмен төлесеңіз — чекте бортовой нөмір болады. Жібере аласыз ба?»
+- Нөмір де, чек те жоқ болса — «Өкінішке орай, нөмірсіз жүргізушіні анықтай алмаймыз. Автопаркке барып диспетчерге жүгіне аласыз.»
+- Тек қазақ тілінде жазыңыз""",
+
+    'en': """You are a support operator of Astana city bus fleet.
+A passenger lost an item on a bus. Your task is to help find the driver of that bus.
+
+You need just ONE bus identifier:
+- Garage number (e.g. A1004)
+- Board number (digits on windshield under QR code)
+- License plate
+
+Rules:
+- Keep replies short — 1–2 sentences
+- Once client provides a number — confirm it and say the driver has been identified
+- If client doesn't remember any number — explain: 'Without a bus number it's hard to find the specific driver since many buses operate on each route.'
+  Then ask: 'If you paid by card or phone, your receipt has the bus board number — could you share it?'
+- If no number and no receipt — say: 'Unfortunately without a bus number we cannot identify the driver. Please visit the depot dispatcher in person.'
+- If client sends a photo or receipt — confirm it
 - Never invent numbers
 - Write only in English""",
 }
@@ -167,6 +251,7 @@ async def generate_reply(
     new_message: str,
     has_file: bool = False,
     lang: str = 'ru',
+    category: str | None = None,
 ) -> str | None:
     """Генерирует ответ ИИ на сообщение пользователя.
 
@@ -192,7 +277,8 @@ async def generate_reply(
         f"автобус_из_чека={complaint.get('bus_info') or 'нет'}"
     )
 
-    system = _SYSTEM.get(lang, _SYSTEM['ru']) + ctx
+    sys_map = _SYSTEM_LOST if (category or complaint.get('category')) == 'lost' else _SYSTEM
+    system = sys_map.get(lang, sys_map['ru']) + ctx
 
     # ── Загружаем историю из БД как память разговора ─────────────────────────
     history = db.get_messages_for_complaint(complaint_id, limit=20)

@@ -39,6 +39,7 @@ CATEGORIES = [
     ('climate',    {'ru': '❄️ Кондиционер / Отопление',         'kk': '❄️ Кондиционер / Жылыту',            'en': '❄️ AC / Heating'}),
     ('condition',  {'ru': '🚌 Санитарное / Тех. состояние',     'kk': '🚌 Автобустың техникалық жағдайы',   'en': '🚌 Bus condition'}),
     ('suggestion', {'ru': '💌 Пожелание / Благодарность',       'kk': '💌 Тілек / Алғыс',                   'en': '💌 Suggestion / Thanks'}),
+    ('lost',       {'ru': '🎒 Потерянные вещи',                 'kk': '🎒 Жоғалған заттар',                 'en': '🎒 Lost items'}),
 ]
 
 # Multilingual strings
@@ -60,6 +61,8 @@ STRINGS = {
         'confirm_no': '❌ Cancel',
         'saved': '✅ Your complaint has been submitted. Thank you!',
         'cancelled': '❌ Cancelled.',
+        'enter_comment_lost': 'Describe the lost item (what is it, color, brand if applicable):',
+        'send_receipt_lost': 'If you paid by card/phone, send your receipt — it has the bus board number. Or tap Skip:',
     },
     'ru': {
         'choose_language': 'Выберите язык:',
@@ -78,6 +81,8 @@ STRINGS = {
         'confirm_no': '❌ Отмена',
         'saved': '✅ Жалоба принята. Спасибо!',
         'cancelled': '❌ Отменено.',
+        'enter_comment_lost': 'Опишите потерянную вещь (что это, цвет, марка если есть):',
+        'send_receipt_lost': 'Если оплачивали картой или телефоном — пришлите чек, в нём есть бортовой номер автобуса. Или нажмите Пропустить:',
     },
     'kk': {
         'choose_language': 'Тілді таңдаңыз:',
@@ -96,9 +101,61 @@ STRINGS = {
         'confirm_no': '❌ Бас тарту',
         'saved': '✅ Шағымыңыз қабылданды. Рахмет!',
         'cancelled': '❌ Бас тартылды.',
+        'enter_comment_lost': 'Жоғалған затты сипаттаңыз (не екенін, түсін, маркасын):',
+        'send_receipt_lost': 'Карта немесе телефонмен төлесеңіз — чекті жіберіңіз, онда бортовой нөмір бар. Немесе Өткізу басыңыз:',
     }
 }
 
+
+DISPATCH_PHONE = os.getenv('DISPATCH_PHONE', '')
+
+_DEPOT_INFO = {
+    'ru': (
+        "✅ Водитель установлен!\n\n"
+        "🚌 Найденные вещи водители сдают диспетчеру автопарка *в конце смены*.\n"
+        "📍 Приходите *вечером после 20:00* и обратитесь к диспетчеру на проходной.\n\n"
+        "{phone}"
+        "Ваше обращение зарегистрировано под номером — диспетчер будет в курсе."
+    ),
+    'kk': (
+        "✅ Жүргізуші анықталды!\n\n"
+        "🚌 Табылған заттарды жүргізушілер *ауысым соңында* автопарк диспетчеріне тапсырады.\n"
+        "📍 *Кешке сағат 20:00-ден кейін* келіп, кіреберістегі диспетчерге хабарласыңыз.\n\n"
+        "{phone}"
+        "Өтінішіңіз тіркелді — диспетчер хабардар болады."
+    ),
+    'en': (
+        "✅ Driver identified!\n\n"
+        "🚌 Found items are handed to the depot dispatcher *at the end of the shift*.\n"
+        "📍 Please come *after 20:00 in the evening* and ask the dispatcher at the entrance.\n\n"
+        "{phone}"
+        "Your request has been registered — the dispatcher will be informed."
+    ),
+}
+
+_DEPOT_INFO_NO_BUS = {
+    'ru': (
+        "😔 К сожалению, без номера автобуса мы не можем установить конкретного водителя.\n\n"
+        "📍 Вы можете прийти в автобусный парк *вечером после 20:00* и обратиться к диспетчеру лично — "
+        "он поможет проверить найденные вещи.\n\n"
+        "{phone}"
+        "Ваше обращение зарегистрировано."
+    ),
+    'kk': (
+        "😔 Өкінішке орай, автобус нөмірінсіз нақты жүргізушіні анықтай алмаймыз.\n\n"
+        "📍 *Кешке сағат 20:00-ден кейін* автопаркке барып диспетчерге жеке хабарласа аласыз — "
+        "ол табылған заттарды тексеруге көмектеседі.\n\n"
+        "{phone}"
+        "Өтінішіңіз тіркелді."
+    ),
+    'en': (
+        "😔 Unfortunately, without a bus number we cannot identify the specific driver.\n\n"
+        "📍 You can visit the depot *after 20:00 in the evening* and speak with the dispatcher in person — "
+        "they can help check found items.\n\n"
+        "{phone}"
+        "Your request has been registered."
+    ),
+}
 
 _BUS_FOUND_ACK = {
     'ru': "✅ Данные получены, спасибо! Автобус определён, жалоба передана в работу.\nОтвет поступит в течение 3 рабочих дней.",
@@ -214,7 +271,9 @@ async def route_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message:
         text = update.message.text.strip()
         context.user_data['route'] = text
-        await update.message.reply_text(_lang(context, 'enter_comment'))
+        category = context.user_data.get('category', '')
+        key = 'enter_comment_lost' if category == 'lost' else 'enter_comment'
+        await update.message.reply_text(_lang(context, key))
     return COMMENT
 
 
@@ -222,11 +281,13 @@ async def comment_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message:
         text = update.message.text.strip()
         context.user_data['comment'] = text
+    category = context.user_data.get('category', '')
+    receipt_key = 'send_receipt_lost' if category == 'lost' else 'send_receipt'
     keyboard = [
         [InlineKeyboardButton(_lang(context, 'skip_receipt'), callback_data='skip_photo')]
     ]
     await update.message.reply_text(
-        _lang(context, 'send_receipt'),
+        _lang(context, receipt_key),
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return PHOTO
@@ -234,26 +295,26 @@ async def comment_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def photo_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_path = None
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    uid = update.effective_user.id
+    ts  = int(datetime.utcnow().timestamp())
+
     if update.message and update.message.photo:
-        photos = update.message.photo
-        os.makedirs('uploads', exist_ok=True)
-        photo = photos[-1]
-        file = await photo.get_file()
-        filename = f"uploads/receipt_{update.effective_user.id}_{int(datetime.utcnow().timestamp())}.jpg"
-        await file.download_to_drive(custom_path=filename)
-        file_path = filename
+        photo = update.message.photo[-1]
+        file  = await photo.get_file()
+        fp    = os.path.join(UPLOAD_DIR, f"receipt_{uid}_{ts}.jpg")
+        await file.download_to_drive(custom_path=fp)
+        file_path = fp
     elif update.message and update.message.document:
-        # Handle PDF
         doc = update.message.document
         if doc.mime_type == 'application/pdf':
-            os.makedirs('uploads', exist_ok=True)
             file = await doc.get_file()
-            filename = f"uploads/receipt_{update.effective_user.id}_{int(datetime.utcnow().timestamp())}.pdf"
-            await file.download_to_drive(custom_path=filename)
-            file_path = filename
+            fp   = os.path.join(UPLOAD_DIR, f"receipt_{uid}_{ts}.pdf")
+            await file.download_to_drive(custom_path=fp)
+            file_path = fp
 
-    # try to extract number and bus info
     bus = None
+    bus_entry = None
     if file_path:
         number, bus, bus_entry = lookup.process_receipt(file_path)
         if number:
@@ -263,8 +324,8 @@ async def photo_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(note)
 
     context.user_data['file_path'] = file_path
-    context.user_data['bus_info'] = bus
-    context.user_data['bus_entry'] = bus_entry
+    context.user_data['bus_info']   = bus
+    context.user_data['bus_entry']  = bus_entry
     await _show_confirm(update, context)
     return CONFIRM
 
@@ -305,9 +366,10 @@ async def _show_confirm(update_or_query, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-async def _start_clarification(bot, user_id: int, complaint_id: int, lang: str):
+async def _start_clarification(bot, user_id: int, complaint_id: int, lang: str, category: str = ''):
     """Отправляет первое сообщение уточнения сразу после подачи жалобы."""
-    msg = conversation_ai.INITIAL_MSG.get(lang, conversation_ai.INITIAL_MSG['ru'])
+    msg_map = conversation_ai.INITIAL_MSG_LOST if category == 'lost' else conversation_ai.INITIAL_MSG
+    msg = msg_map.get(lang, msg_map['ru'])
     db.save_message(
         complaint_id=complaint_id,
         sender_id=0,
@@ -389,21 +451,23 @@ async def confirm_complaint(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(_lang(context, 'saved'))
 
         if complaint_id:
-            if file_path:
-                # Клиент приложил чек/фото — в нём есть бортовой номер, уточнять не нужно
-                ack = _RECEIPT_ACK.get(lang, _RECEIPT_ACK['ru'])
-                await context.bot.send_message(chat_id=user.id, text=ack)
-            elif conversation_ai.should_clarify({
+            needs_clarify = conversation_ai.should_clarify({
                 'category': category,
                 'bus_garage_number': bus_garage,
                 'bus_info': bus_info,
-            }):
-                # Клиент нажал «Пропустить» — запускаем диалог уточнения
+            })
+            if file_path and category != 'lost':
+                # Чек/фото содержит бортовой номер — уточнять не нужно (кроме lost)
+                ack = _RECEIPT_ACK.get(lang, _RECEIPT_ACK['ru'])
+                await context.bot.send_message(chat_id=user.id, text=ack)
+            elif needs_clarify:
+                # Запускаем диалог уточнения (для lost — всегда, для остальных — если нет данных)
                 asyncio.create_task(_start_clarification(
                     bot=context.bot,
                     user_id=user.id,
                     complaint_id=complaint_id,
                     lang=lang,
+                    category=category or '',
                 ))
             elif category in ai_reply.AUTO_REPLY_CATEGORIES:
                 asyncio.create_task(_send_ai_reply_delayed(
@@ -564,11 +628,16 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except Exception as e:
                     logger.error(f'Ошибка запроса ПЛ из 1С: {e}')
 
-            ack = _BUS_FOUND_ACK.get(lang, _BUS_FOUND_ACK['ru'])
+            # Для lost — отправляем инфо про автопарк, для остальных — стандартное подтверждение
+            if complaint.get('category') == 'lost':
+                phone_line = f"📞 Если срочно — позвоните диспетчеру: *{DISPATCH_PHONE}*\n\n" if DISPATCH_PHONE else ''
+                ack = _DEPOT_INFO.get(lang, _DEPOT_INFO['ru']).format(phone=phone_line)
+            else:
+                ack = _BUS_FOUND_ACK.get(lang, _BUS_FOUND_ACK['ru'])
 
             db.save_message(complaint_id=complaint_id, sender_id=0, sender_type='admin',
                             sender_name='AutoPark AI', text=ack)
-            await message.reply_text(ack)
+            await message.reply_text(ack, parse_mode='Markdown')
             return
 
         # Идентификатор не найден — продолжаем AI-диалог
@@ -577,6 +646,7 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             new_message=text,
             has_file=bool(file_path),
             lang=lang,
+            category=complaint.get('category'),
         )
         if ai_response:
             db.save_message(complaint_id=complaint_id, sender_id=0, sender_type='admin',
