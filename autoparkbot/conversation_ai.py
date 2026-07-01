@@ -86,7 +86,7 @@ _SYSTEM = {
 
 Правила:
 - Отвечай коротко — 1–2 предложения
-- Как только клиент дал ЛЮБОЙ один номер — подтверди его и сразу заверши: «жалоба будет рассмотрена в течение 3 рабочих дней»
+- Как только клиент дал ЛЮБОЙ один номер — подтверди его и сразу заверши: «жалоба будет рассмотрена в течение 10 рабочих дней»
 - Не проси остальные номера если один уже есть
 - Если клиент говорит что не помнит номер — объясни: «На линии одновременно работает много автобусов, без номера мы не сможем точно определить водителя или автобус.»
   Затем спроси: «Если вы оплачивали проезд, в чеке есть бортовой номер автобуса — можете его прислать?»
@@ -105,7 +105,7 @@ _SYSTEM = {
 
 Ережелер:
 - Қысқаша жауап беріңіз — 1–2 сөйлем
-- Клиент кез келген БІР нөмір берсе — растап, диалогты аяқтаңыз: «шағым 3 жұмыс күні ішінде қаралады»
+- Клиент кез келген БІР нөмір берсе — растап, диалогты аяқтаңыз: «шағым 10 жұмыс күні ішінде қаралады»
 - Бір нөмір болса, қалғандарын сұрамаңыз
 - Клиент нөмірді есіне түсіре алмаса — түсіндіріңіз: «Жолда бір уақытта көп автобус жүреді, нөмірсіз жүргізушіні немесе автобусты дәл анықтай алмаймыз.»
   Содан кейін сұраңыз: «Жол ақысын төлесеңіз, чекте автобустың бортовой нөмірі болады — жібере аласыз ба?»
@@ -122,7 +122,7 @@ Any one of these works (one is enough!):
 
 Rules:
 - Keep replies short — 1–2 sentences
-- As soon as the client provides ANY one identifier — confirm it and close: 'your complaint will be reviewed within 3 business days'
+- As soon as the client provides ANY one identifier — confirm it and close: 'your complaint will be reviewed within 10 business days'
 - Do NOT ask for the other numbers once you have one
 - If client says they don't remember any number — explain: 'Many buses operate at the same time, so without a number we cannot identify the specific driver or bus.'
   Then ask: 'If you paid for the ride, your receipt contains the bus board number — could you share it?'

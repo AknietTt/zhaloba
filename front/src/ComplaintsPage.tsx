@@ -8,7 +8,7 @@ const STATUS_LABEL: Record<Status, string> = {
 };
 const ALL_STATUSES: Status[] = ['new', 'in_progress', 'replied', 'closed'];
 
-type CategoryCode = 'interval' | 'driver' | 'climate' | 'condition' | 'suggestion';
+type CategoryCode = 'interval' | 'driver' | 'climate' | 'condition' | 'suggestion' | 'lost';
 
 const CATEGORY_LABEL: Record<CategoryCode, string> = {
   interval:  '🕐 Нарушение интервала',
@@ -16,6 +16,7 @@ const CATEGORY_LABEL: Record<CategoryCode, string> = {
   climate:   '❄️ Кондиционер/Отопление',
   condition: '🚌 Тех. состояние',
   suggestion:'💌 Пожелание/Благодарность',
+  lost:      '🎒 Потерянные вещи',
 };
 
 const CATEGORY_COLOR: Record<CategoryCode, string> = {
@@ -24,6 +25,7 @@ const CATEGORY_COLOR: Record<CategoryCode, string> = {
   climate:   '#dbeafe',
   condition: '#f0fdf4',
   suggestion:'#fdf4ff',
+  lost:      '#fff7ed',
 };
 const CATEGORY_TEXT: Record<CategoryCode, string> = {
   interval:  '#92400e',
@@ -31,6 +33,7 @@ const CATEGORY_TEXT: Record<CategoryCode, string> = {
   climate:   '#1e40af',
   condition: '#166534',
   suggestion:'#6b21a8',
+  lost:      '#9a3412',
 };
 
 interface Complaint {
@@ -131,22 +134,49 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
   const [filterDriver, setFilterDriver] = useState('');
   const [filterSearch, setFilterSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
+  const [filterStatuses, setFilterStatuses] = useState<Status[]>([]);
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo]   = useState('');
+  const [sortBy, setSortBy]         = useState('id');
+  const [sortOrder, setSortOrder]   = useState<'asc' | 'desc'>('desc');
+
   const dRoute    = useDebounce(filterRoute,    400);
   const dBus      = useDebounce(filterBus,      400);
   const dDriver   = useDebounce(filterDriver,   400);
   const dSearch   = useDebounce(filterSearch,   400);
   const dCategory = useDebounce(filterCategory, 0);
+  const dDateFrom = useDebounce(filterDateFrom, 400);
+  const dDateTo   = useDebounce(filterDateTo,   400);
 
-  const fetchComplaints = useCallback(async (p: number, route: string, bus: string, driver: string, search: string, category: string) => {
+  const toggleStatus = (s: Status) =>
+    setFilterStatuses(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+
+  const hasFilters = !!(filterRoute || filterBus || filterDriver || filterSearch || filterCategory
+    || filterStatuses.length || filterDateFrom || filterDateTo);
+
+  const clearFilters = () => {
+    setFilterRoute(''); setFilterBus(''); setFilterDriver('');
+    setFilterSearch(''); setFilterCategory('');
+    setFilterStatuses([]); setFilterDateFrom(''); setFilterDateTo('');
+    setSortBy('id'); setSortOrder('desc');
+  };
+
+  const fetchComplaints = useCallback(async (
+    p: number, route: string, bus: string, driver: string, search: string, category: string,
+    statuses: Status[], dateFrom: string, dateTo: string, sb: string, so: string,
+  ) => {
     setLoading(true); setFetchError('');
     try {
-      const params = new URLSearchParams({ page: String(p), page_size: String(PAGE_SIZE) });
-      if (route.trim())    params.set('route', route.trim());
-      if (bus.trim())      params.set('bus', bus.trim());
-      if (driver.trim())   params.set('driver', driver.trim());
-      if (search.trim())   params.set('search', search.trim());
-      if (category.trim()) params.set('category', category.trim());
-      const res = await fetch(`/complaints?${params}`);
+      const qs = new URLSearchParams({ page: String(p), page_size: String(PAGE_SIZE), sort_by: sb, sort_order: so });
+      if (route.trim())    qs.set('route', route.trim());
+      if (bus.trim())      qs.set('bus', bus.trim());
+      if (driver.trim())   qs.set('driver', driver.trim());
+      if (search.trim())   qs.set('search', search.trim());
+      if (category.trim()) qs.set('category', category.trim());
+      if (statuses.length) qs.set('status', statuses.join(','));
+      if (dateFrom)        qs.set('date_from', dateFrom);
+      if (dateTo)          qs.set('date_to', dateTo);
+      const res = await fetch(`/complaints?${qs}`);
       if (!res.ok) throw new Error(`Ошибка ${res.status}`);
       const json: ComplaintsResponse = await res.json();
       setData(json);
@@ -160,8 +190,10 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { setPage(1); }, [dRoute, dBus, dDriver, dSearch, dCategory]);
-  useEffect(() => { fetchComplaints(page, dRoute, dBus, dDriver, dSearch, dCategory); }, [page, dRoute, dBus, dDriver, dSearch, dCategory, fetchComplaints]);
+  useEffect(() => { setPage(1); }, [dRoute, dBus, dDriver, dSearch, dCategory, filterStatuses, dDateFrom, dDateTo, sortBy, sortOrder]);
+  useEffect(() => {
+    fetchComplaints(page, dRoute, dBus, dDriver, dSearch, dCategory, filterStatuses, dDateFrom, dDateTo, sortBy, sortOrder);
+  }, [page, dRoute, dBus, dDriver, dSearch, dCategory, filterStatuses, dDateFrom, dDateTo, sortBy, sortOrder, fetchComplaints]);
 
   // ── Waybill ──
   const loadWaybill = async (id: number) => {
@@ -266,7 +298,7 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
   return (
     <Layout user={user} onLogout={onLogout} title="Реестр жалоб" breadcrumb="Главная / Жалобы">
 
-      {/* ── Фильтры ── */}
+      {/* ── Фильтры: строка 1 ── */}
       <div className="filter-bar">
         <div className="filter-group">
           <label className="filter-label">🚏 Маршрут</label>
@@ -293,19 +325,67 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
           <label className="filter-label">🔍 Поиск</label>
           <input className="filter-input" placeholder="Текст жалобы…" value={filterSearch} onChange={e => setFilterSearch(e.target.value)} />
         </div>
-        {(filterRoute || filterBus || filterDriver || filterSearch || filterCategory) && (
-          <button className="btn btn-outline btn-sm filter-clear"
-            onClick={() => { setFilterRoute(''); setFilterBus(''); setFilterDriver(''); setFilterSearch(''); setFilterCategory(''); }}>
-            ✕ Сбросить
-          </button>
+        {hasFilters && (
+          <button className="btn btn-outline btn-sm filter-clear" onClick={clearFilters}>✕ Сбросить</button>
         )}
+      </div>
+
+      {/* ── Фильтры: строка 2 — статусы, даты, сортировка ── */}
+      <div className="filter-bar filter-bar-second">
+        {/* Статусы */}
+        <div className="filter-section-wide">
+          <span className="filter-label">📊 Статус</span>
+          <div className="status-chips">
+            <button
+              className={`status-chip${filterStatuses.length === 0 ? ' status-chip-all active' : ' status-chip-all'}`}
+              onClick={() => setFilterStatuses([])}
+            >Все</button>
+            {ALL_STATUSES.map(s => (
+              <button
+                key={s}
+                className={`status-chip status-chip-${s}${filterStatuses.includes(s) ? ' active' : ''}`}
+                onClick={() => toggleStatus(s)}
+              >{STATUS_LABEL[s]}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Дата от/до */}
+        <div className="filter-group" style={{ minWidth: 140 }}>
+          <label className="filter-label">📅 Дата от</label>
+          <input type="date" className="filter-input" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} />
+        </div>
+        <div className="filter-group" style={{ minWidth: 140 }}>
+          <label className="filter-label">📅 Дата до</label>
+          <input type="date" className="filter-input" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} />
+        </div>
+
+        {/* Сортировка */}
+        <div className="filter-group" style={{ minWidth: 180 }}>
+          <label className="filter-label">↕ Сортировка</label>
+          <div className="sort-row">
+            <select className="filter-input" value={sortBy} onChange={e => setSortBy(e.target.value)}>
+              <option value="id">По дате создания</option>
+              <option value="route">По маршруту</option>
+              <option value="status">По статусу</option>
+              <option value="category">По категории</option>
+            </select>
+            <button
+              className="btn btn-outline btn-sm sort-dir-btn"
+              onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')}
+              title={sortOrder === 'desc' ? 'Сначала новые' : 'Сначала старые'}
+            >
+              {sortOrder === 'desc' ? '↓' : '↑'}
+            </button>
+          </div>
+        </div>
       </div>
 
       {loading && <div className="loading-state"><div className="spinner" /><p>Загружаем жалобы…</p></div>}
       {!loading && fetchError && (
         <div className="error-state">
           <span className="state-icon">⚠️</span><p>{fetchError}</p>
-          <button className="btn btn-primary btn-sm" onClick={() => fetchComplaints(page, dRoute, dBus, dDriver, dSearch, dCategory)}>Повторить</button>
+          <button className="btn btn-primary btn-sm" onClick={() => fetchComplaints(page, dRoute, dBus, dDriver, dSearch, dCategory, filterStatuses, dDateFrom, dDateTo, sortBy, sortOrder)}>Повторить</button>
         </div>
       )}
       {!loading && !fetchError && data?.items.length === 0 && (

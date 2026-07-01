@@ -127,12 +127,20 @@ def list_complaints(
     search: Optional[str] = None,
     driver: Optional[str] = None,
     category: Optional[str] = None,
+    status: Optional[str] = None,
+    sort_by: str = 'id',
+    sort_order: str = 'desc',
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
 ):
     if page < 1 or page_size < 1:
         raise HTTPException(status_code=400, detail='page and page_size must be positive integers')
-    total = db.count_complaints(route=route, bus=bus, search=search, driver=driver, category=category)
+    total = db.count_complaints(route=route, bus=bus, search=search, driver=driver, category=category,
+                                status=status, date_from=date_from, date_to=date_to)
     offset = (page - 1) * page_size
-    rows = db.list_complaints(limit=page_size, offset=offset, route=route, bus=bus, search=search, driver=driver, category=category)
+    rows = db.list_complaints(limit=page_size, offset=offset, route=route, bus=bus, search=search, driver=driver,
+                              category=category, status=status, sort_by=sort_by, sort_order=sort_order,
+                              date_from=date_from, date_to=date_to)
     data = []
     for row in rows:
         id_, r, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab, cat = row

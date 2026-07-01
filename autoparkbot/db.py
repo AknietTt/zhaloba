@@ -121,6 +121,11 @@ def list_complaints(
     search: str | None = None,
     driver: str | None = None,
     category: str | None = None,
+    status: str | None = None,
+    sort_by: str = 'id',
+    sort_order: str = 'desc',
+    date_from: str | None = None,
+    date_to: str | None = None,
     path: str | None = None,
 ):
     p = path or DB_PATH
@@ -142,10 +147,27 @@ def list_complaints(
     if search:
         conditions.append("(comment LIKE ? OR username LIKE ? OR user_full_name LIKE ? OR bus_info LIKE ?)")
         params.extend([f"%{search}%"] * 4)
+    if status:
+        sl = [s.strip() for s in status.split(',') if s.strip()]
+        if len(sl) == 1:
+            conditions.append("status = ?")
+            params.append(sl[0])
+        elif sl:
+            conditions.append(f"status IN ({','.join('?'*len(sl))})")
+            params.extend(sl)
+    if date_from:
+        conditions.append("created_at >= ?")
+        params.append(date_from)
+    if date_to:
+        conditions.append("created_at <= ?")
+        params.append(date_to + 'T23:59:59')
     where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+    valid_cols = {'id', 'created_at', 'status', 'route', 'category'}
+    col = sort_by if sort_by in valid_cols else 'id'
+    direction = 'ASC' if sort_order.lower() == 'asc' else 'DESC'
     cur.execute(
         f"""SELECT id, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, driver_name, driver_tab, category
-           FROM complaints{where} ORDER BY id DESC LIMIT ? OFFSET ?""",
+           FROM complaints{where} ORDER BY {col} {direction} LIMIT ? OFFSET ?""",
         params + [limit, offset],
     )
     rows = cur.fetchall()
@@ -183,6 +205,9 @@ def count_complaints(
     search: str | None = None,
     driver: str | None = None,
     category: str | None = None,
+    status: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
     path: str | None = None,
 ) -> int:
     p = path or DB_PATH
@@ -204,6 +229,20 @@ def count_complaints(
     if search:
         conditions.append("(comment LIKE ? OR username LIKE ? OR user_full_name LIKE ? OR bus_info LIKE ?)")
         params.extend([f"%{search}%"] * 4)
+    if status:
+        sl = [s.strip() for s in status.split(',') if s.strip()]
+        if len(sl) == 1:
+            conditions.append("status = ?")
+            params.append(sl[0])
+        elif sl:
+            conditions.append(f"status IN ({','.join('?'*len(sl))})")
+            params.extend(sl)
+    if date_from:
+        conditions.append("created_at >= ?")
+        params.append(date_from)
+    if date_to:
+        conditions.append("created_at <= ?")
+        params.append(date_to + 'T23:59:59')
     where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
     cur.execute(f"SELECT COUNT(*) FROM complaints{where}", params)
     total = cur.fetchone()[0]

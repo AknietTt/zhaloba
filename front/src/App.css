@@ -581,6 +581,61 @@ tbody tr:hover td { background: var(--surface-raised); }
 .filter-clear { align-self: flex-end; white-space: nowrap; }
 
 /* ─────────────────────────────────────────────────────
+   FILTER BAR — SECOND ROW
+───────────────────────────────────────────────────── */
+.filter-bar-second {
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 14px;
+  margin-top: -6px;
+}
+
+.filter-section-wide {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.status-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.status-chip {
+  padding: 5px 13px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1.5px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+              color     var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out);
+  white-space: nowrap;
+}
+.status-chip:hover { border-color: var(--border-strong); color: var(--ink); }
+
+.status-chip-all.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+.status-chip-new.active         { background: var(--status-new-bg);    color: var(--status-new-ink);    border-color: var(--status-new-ink); }
+.status-chip-in_progress.active { background: var(--status-prog-bg);   color: var(--status-prog-ink);   border-color: var(--status-prog-ink); }
+.status-chip-replied.active     { background: var(--status-rep-bg);    color: var(--status-rep-ink);    border-color: var(--status-rep-ink); }
+.status-chip-closed.active      { background: var(--status-closed-bg); color: var(--status-closed-ink); border-color: var(--status-closed-ink); }
+
+.sort-row { display: flex; gap: 6px; align-items: stretch; }
+.sort-dir-btn {
+  flex-shrink: 0;
+  padding: 0 12px;
+  font-size: 16px;
+  font-weight: 700;
+  height: 100%;
+  min-height: 36px;
+}
+
+/* ─────────────────────────────────────────────────────
    DRIVERS TABLE
 ───────────────────────────────────────────────────── */
 .drivers-table { font-size: 13.5px; }

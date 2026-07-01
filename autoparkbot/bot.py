@@ -158,29 +158,29 @@ _DEPOT_INFO_NO_BUS = {
 }
 
 _BUS_FOUND_ACK = {
-    'ru': "✅ Данные получены, спасибо! Автобус определён, жалоба передана в работу.\nОтвет поступит в течение 3 рабочих дней.",
-    'kk': "✅ Мәліметтер алынды, рахмет! Автобус анықталды, шағым өңдеуге жіберілді.\nЖауап 3 жұмыс күні ішінде келеді.",
-    'en': "✅ Got it, thank you! The bus has been identified and your complaint is now in review.\nYou'll receive a response within 3 business days.",
+    'ru': "✅ Данные получены, спасибо! Автобус определён, жалоба передана в работу.\nОтвет поступит в течение 10 рабочих дней.",
+    'kk': "✅ Мәліметтер алынды, рахмет! Автобус анықталды, шағым өңдеуге жіберілді.\nЖауап 10 жұмыс күні ішінде келеді.",
+    'en': "✅ Got it, thank you! The bus has been identified and your complaint is now in review.\nYou'll receive a response within 10 business days.",
 }
 
 _BUS_NOT_FOUND_ACK = {
-    'ru': "✅ Данные записаны, спасибо! Жалоба передана в работу.\nОтвет поступит в течение 3 рабочих дней.",
-    'kk': "✅ Мәліметтер жазылды, рахмет! Шағым өңдеуге жіберілді.\nЖауап 3 жұмыс күні ішінде келеді.",
-    'en': "✅ Details noted, thank you! Your complaint has been forwarded for review.\nYou'll receive a response within 3 business days.",
+    'ru': "✅ Данные записаны, спасибо! Жалоба передана в работу.\nОтвет поступит в течение 10 рабочих дней.",
+    'kk': "✅ Мәліметтер жазылды, рахмет! Шағым өңдеуге жіберілді.\nЖауап 10 жұмыс күні ішінде келеді.",
+    'en': "✅ Details noted, thank you! Your complaint has been forwarded for review.\nYou'll receive a response within 10 business days.",
 }
 
 _RECEIPT_ACK = {
     'ru': (
         "✅ Чек получен! По нему мы определим автобус и водителя.\n"
-        "Жалоба будет рассмотрена в течение 3 рабочих дней."
+        "Жалоба будет рассмотрена в течение 10 рабочих дней."
     ),
     'kk': (
         "✅ Чек алынды! Ол арқылы автобус пен жүргізушіні анықтаймыз.\n"
-        "Шағымыңыз 3 жұмыс күні ішінде қаралады."
+        "Шағымыңыз 10 жұмыс күні ішінде қаралады."
     ),
     'en': (
         "✅ Receipt received! We'll use it to identify the bus and driver.\n"
-        "Your complaint will be reviewed within 3 business days."
+        "Your complaint will be reviewed within 10 business days."
     ),
 }
 
