@@ -115,6 +115,8 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
   const [draftStatus, setDraftStatus] = useState<Record<number, Status>>({});
   const [actLoading, setActLoading] = useState<Record<number, boolean>>({});
   const [actMsg, setActMsg] = useState<Record<number, string>>({});
+  // IDs с несохранёнными изменениями статуса — ref чтобы fetchComplaints всегда видел актуальное значение
+  const dirtyIdsRef = useRef<Set<number>>(new Set());
 
   // Waybill
   const [waybillData, setWaybillData] = useState<Record<number, WaybillRecord[] | null>>({});
@@ -182,7 +184,8 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
       setData(json);
       setDraftStatus(prev => {
         const next = { ...prev };
-        json.items.forEach(c => { next[c.id] = c.status; });
+        // не перезаписываем ID с несохранёнными изменениями
+        json.items.forEach(c => { if (!dirtyIdsRef.current.has(c.id)) next[c.id] = c.status; });
         return next;
       });
     } catch (err) {
@@ -282,6 +285,7 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
     setActLoading(prev => ({ ...prev, [id]: true }));
     try {
       await patchStatus(id, draftStatus[id]);
+      dirtyIdsRef.current.delete(id);
       setActMsg(prev => ({ ...prev, [id]: '✓ Статус сохранён' }));
       setTimeout(() => setActMsg(prev => ({ ...prev, [id]: '' })), 3000);
     } finally { setActLoading(prev => ({ ...prev, [id]: false })); }
@@ -460,7 +464,10 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
                         <p className="action-title">Статус жалобы</p>
                         <div className="action-row">
                           <select className="status-select" value={status}
-                            onChange={e => setDraftStatus(prev => ({ ...prev, [c.id]: e.target.value as Status }))}>
+                            onChange={e => {
+                              dirtyIdsRef.current.add(c.id);
+                              setDraftStatus(prev => ({ ...prev, [c.id]: e.target.value as Status }));
+                            }}>
                             {ALL_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
                           </select>
                           <button className="btn btn-primary btn-sm"
