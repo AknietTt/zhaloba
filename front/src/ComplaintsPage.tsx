@@ -181,9 +181,9 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
       const json: ComplaintsResponse = await res.json();
       setData(json);
       setDraftStatus(prev => {
-        const init: Record<number, Status> = {};
-        json.items.forEach(c => { if (!(c.id in prev)) init[c.id] = c.status; });
-        return { ...prev, ...init };
+        const next = { ...prev };
+        json.items.forEach(c => { next[c.id] = c.status; });
+        return next;
       });
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Неизвестная ошибка');
