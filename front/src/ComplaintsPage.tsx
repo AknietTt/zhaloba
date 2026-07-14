@@ -273,10 +273,11 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
 
   // ── Status ──
   const patchStatus = async (id: number, status: Status) => {
-    await fetch(`/complaints/${id}/status`, {
+    const res = await fetch(`/complaints/${id}/status`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ status }),
     });
+    if (!res.ok) throw new Error(`Ошибка сервера ${res.status}`);
     setData(prev => prev ? { ...prev, items: prev.items.map(c => c.id === id ? { ...c, status } : c) } : prev);
     setDraftStatus(prev => ({ ...prev, [id]: status }));
   };
@@ -287,6 +288,9 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
       await patchStatus(id, draftStatus[id]);
       dirtyIdsRef.current.delete(id);
       setActMsg(prev => ({ ...prev, [id]: '✓ Статус сохранён' }));
+      setTimeout(() => setActMsg(prev => ({ ...prev, [id]: '' })), 3000);
+    } catch {
+      setActMsg(prev => ({ ...prev, [id]: '✗ Ошибка сохранения' }));
       setTimeout(() => setActMsg(prev => ({ ...prev, [id]: '' })), 3000);
     } finally { setActLoading(prev => ({ ...prev, [id]: false })); }
   };
@@ -448,6 +452,12 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
                     if (opening) {
                       if (c.bus_garage_number) loadWaybill(c.id);
                       loadChat(c.id);
+                    } else {
+                      // Discard unsaved status change when collapsing
+                      if (dirtyIdsRef.current.has(c.id)) {
+                        dirtyIdsRef.current.delete(c.id);
+                        setDraftStatus(prev => ({ ...prev, [c.id]: c.status }));
+                      }
                     }
                     setExpandedId(opening ? c.id : null);
                     if (opening) scrollToBottom(c.id);

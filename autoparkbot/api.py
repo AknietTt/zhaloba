@@ -760,7 +760,7 @@ def admin(request: Request, page: int = 1, page_size: int = 20):
     html += f'<p>Всего жалоб: {total} | <a href="/stats">📊 Статистика</a></p>'
 
     for row in rows:
-        id_, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status = row
+        id_, route, comment, photo_path, user_id, created_at, bus_info, bus_garage_number, username, user_full_name, status, *_ = row
         sender_name = user_full_name or username or f'User {user_id}'
         msg_count = db.count_messages_for_complaint(id_)
 

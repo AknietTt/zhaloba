@@ -580,13 +580,6 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             id_value = identifier['value']
             logger.info(f"Идентификатор автобуса из диалога: {id_type}={id_value}")
 
-            # Поиск в Excel-таблице
-            bus_entry = None
-            if id_type in ('board', 'garage'):
-                bus_entry = lookup.find_bus_entry(id_value)
-            elif id_type == 'plate':
-                bus_entry = lookup.find_bus_by_plate(id_value)
-
             garage_number = None
 
             if id_type == 'garage':
@@ -708,7 +701,7 @@ def main():
                 CallbackQueryHandler(set_language, pattern='^lang_(en|ru|kk)$'),
             ],
             CATEGORY: [
-                CallbackQueryHandler(category_selected, pattern='^cat_(interval|driver|climate|condition|suggestion)$'),
+                CallbackQueryHandler(category_selected, pattern='^cat_(interval|driver|climate|condition|suggestion|lost)$'),
             ],
             ROUTE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, route_received),

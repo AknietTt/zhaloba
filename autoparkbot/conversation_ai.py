@@ -208,8 +208,8 @@ def extract_bus_identifier(text: str) -> dict | None:
     if not text:
         return None
 
-    # Гаражный номер: А1004, Е035, K729 — одна буква (любая) + 3-4 цифры
-    m = re.search(r'\b([А-ЯЁA-Zа-яёa-z]\s*\d{3,4})\b', text)
+    # Гаражный номер: А1004, Е035, K729 — одна заглавная буква + 3-4 цифры
+    m = re.search(r'\b([А-ЯЁA-Z]\s*\d{3,4})\b', text)
     if m:
         val = normalize_garage(re.sub(r'\s+', '', m.group(1)))
         return {'type': 'garage', 'value': val}
