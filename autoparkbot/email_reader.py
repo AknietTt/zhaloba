@@ -137,7 +137,7 @@ def send_confirmation(to_addr: str, complaint_id: int, category: str, route: str
             f'Номер обращения: #{complaint_id}\n'
             f'{route_str}'
             f'Категория: {category_ru}\n\n'
-            f'Оно будет рассмотрено в течение 3 рабочих дней.\n\n'
+            f'Оно будет рассмотрено в течение 10 рабочих дней.\n\n'
             f'С уважением,\nАвтопарк Астаны'
         )
         msg = MIMEText(body, 'plain', 'utf-8')
