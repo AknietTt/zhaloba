@@ -1,5 +1,6 @@
 import os
 import uuid
+import asyncio
 import logging
 from datetime import datetime
 from typing import List, Optional
@@ -273,8 +274,8 @@ async def update_status(complaint_id: int, status: str = Form(...)):
 
     db.update_status(complaint_id, status)
 
-    # Send status update to 1C
-    await onec.update_status_in_onec(complaint_id, status)
+    # Fire-and-forget: не блокируем ответ ожиданием 1С
+    asyncio.create_task(onec.update_status_in_onec(complaint_id, status))
 
     return {'id': complaint_id, 'status': status}
 
