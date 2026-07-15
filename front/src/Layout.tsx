@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 
 export default function Layout({ user, onLogout, children, title, breadcrumb }: Props) {
   const navigate = useNavigate();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleLogout = () => {
     onLogout();
@@ -18,7 +20,12 @@ export default function Layout({ user, onLogout, children, title, breadcrumb }: 
 
   return (
     <div className="layout">
-      <aside className="sidebar">
+      {/* Overlay for mobile */}
+      {sidebarOpen && (
+        <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      <aside className={`sidebar${sidebarOpen ? ' sidebar-open' : ''}`}>
         <div className="sidebar-logo">
           <div className="sidebar-logo-title">🚌 AutoPark Admin</div>
           <div className="sidebar-logo-sub">Система жалоб</div>
@@ -26,10 +33,12 @@ export default function Layout({ user, onLogout, children, title, breadcrumb }: 
 
         <nav className="sidebar-nav">
           <div className="nav-section-label">Навигация</div>
-          <NavLink to="/complaints" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
+          <NavLink to="/complaints" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+            onClick={() => setSidebarOpen(false)}>
             <span className="nav-icon">📋</span> Жалобы
           </NavLink>
-          <NavLink to="/stats" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
+          <NavLink to="/stats" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+            onClick={() => setSidebarOpen(false)}>
             <span className="nav-icon">📊</span> Статистика
           </NavLink>
         </nav>
@@ -44,6 +53,7 @@ export default function Layout({ user, onLogout, children, title, breadcrumb }: 
       <div className="main">
         <div className="topbar">
           <div className="topbar-left">
+            <button className="topbar-hamburger" onClick={() => setSidebarOpen(o => !o)} aria-label="Меню">☰</button>
             {breadcrumb && <div className="topbar-breadcrumb">{breadcrumb}</div>}
             <div className="topbar-title">{title}</div>
           </div>

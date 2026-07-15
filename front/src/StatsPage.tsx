@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import Layout from './Layout';
 
 interface Props { user: string; onLogout: () => void; }
@@ -203,8 +203,8 @@ export default function StatsPage({ user, onLogout }: Props) {
     finally { setDriverLoading(false); }
   }, []);
 
-  const stats = computeStats(allItems);
-  const dStats = driverItems ? computeStats(driverItems) : null;
+  const stats = useMemo(() => computeStats(allItems), [allItems]);
+  const dStats = useMemo(() => driverItems ? computeStats(driverItems) : null, [driverItems]);
   const driverName = driverItems?.find(c => c.driver_name)?.driver_name;
 
   const hourLabels = Array.from({ length: 24 }, (_, h) => h % 3 === 0 ? `${String(h).padStart(2,'0')}` : '');
@@ -328,7 +328,7 @@ export default function StatsPage({ user, onLogout }: Props) {
                         background: isTop3 ? (i === 0 ? 'linear-gradient(90deg,#fffbeb,transparent)' : i === 1 ? 'linear-gradient(90deg,#f8fafc,transparent)' : 'transparent') : 'transparent',
                       }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-raised)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = isTop3 ? (i === 0 ? 'linear-gradient(90deg,#fffbeb,transparent)' : 'transparent') : 'transparent')}
+                      onMouseLeave={e => (e.currentTarget.style.background = i === 0 ? 'linear-gradient(90deg,#fffbeb,transparent)' : i === 1 ? 'linear-gradient(90deg,#f8fafc,transparent)' : 'transparent')}
                     >
                       <div style={{ fontSize: i < 3 ? 20 : 13, fontWeight: 700, color: 'var(--ink-4)', textAlign: 'center' }}>
                         {i < 3 ? MEDAL[i] : i + 1}

@@ -49,7 +49,7 @@ function LoginPage({ onLogin }: { onLogin: (u: string) => void }) {
           </div>
           <button type="submit" className="btn-login">Войти</button>
         </form>
-        <p className="login-hint">user@example.com / password123</p>
+        <p className="login-hint">AutoPark Admin</p>
       </div>
     </div>
   );

@@ -251,7 +251,7 @@ export default function ComplaintsPage({ user, onLogout }: Props) {
       setChatInput(prev => ({ ...prev, [c.id]: '' }));
       scrollToBottom(c.id);
       if (c.status === 'new') {
-        patchStatus(c.id, 'in_progress');
+        patchStatus(c.id, 'in_progress').catch(() => {});
       }
     } finally { setChatSending(prev => ({ ...prev, [c.id]: false })); }
   };

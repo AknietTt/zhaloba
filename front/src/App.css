@@ -584,7 +584,7 @@ tbody tr:hover td { background: var(--surface-raised); }
    FILTER BAR — SECOND ROW
 ───────────────────────────────────────────────────── */
 .filter-bar-second {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: flex-end;
   gap: 14px;
   margin-top: -6px;
@@ -734,9 +734,35 @@ tbody tr:hover td { background: var(--surface-raised); }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
+.sidebar-overlay {
+  display: none;
+}
+.topbar-hamburger {
+  display: none;
+  font-size: 20px;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  color: var(--ink-2);
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+.topbar-hamburger:hover { background: var(--surface-raised); }
+
 @media (max-width: 900px) {
-  .sidebar { transform: translateX(-100%); }
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform var(--dur-base) var(--ease-out);
+    z-index: 200;
+  }
+  .sidebar.sidebar-open { transform: translateX(0); }
+  .sidebar-overlay {
+    display: block;
+    position: fixed; inset: 0;
+    background: oklch(0 0 0 / 0.4);
+    z-index: 150;
+  }
   .main { margin-left: 0; }
+  .topbar-hamburger { display: inline-flex; align-items: center; }
   .stats-grid { grid-template-columns: 1fr; }
   .waybill-grid { grid-template-columns: 1fr; }
 }
