@@ -776,7 +776,7 @@ tbody tr:hover td { background: var(--surface-raised); }
 /* ─────────────────────────────────────────────────────
    SUPERADMIN
 ───────────────────────────────────────────────────── */
-.sa-kpi { grid-template-columns: repeat(2, 1fr); max-width: 440px; }
+.sa-kpi { grid-template-columns: repeat(3, 1fr); max-width: 620px; }
 
 .sa-broadcast-footer {
   display: flex; align-items: center; gap: 14px; margin-top: 10px; flex-wrap: wrap;

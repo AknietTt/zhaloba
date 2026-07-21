@@ -975,15 +975,22 @@ async def _tg_send(client: httpx.AsyncClient, token: str, user_id: int,
 
 @app.get('/superadmin/users')
 async def superadmin_users():
-    users = db.get_bot_users()
-    return {'total': len(users), 'users': users}
+    users = db.get_all_telegram_users()
+    bot_count       = sum(1 for u in users if u['source'] in ('bot', 'both'))
+    complaint_count = sum(1 for u in users if u['source'] in ('complaint', 'both'))
+    return {
+        'total': len(users),
+        'bot_count': bot_count,
+        'complaint_count': complaint_count,
+        'users': users,
+    }
 
 
 @app.post('/superadmin/broadcast')
 async def superadmin_broadcast(text: str = Form(...)):
     if not text.strip():
         raise HTTPException(status_code=400, detail='Текст не может быть пустым')
-    users = db.get_bot_users()
+    users = db.get_all_telegram_users()
     if not users:
         return {'success': 0, 'failed': 0, 'total': 0}
     token = os.getenv('TELEGRAM_TOKEN', '')

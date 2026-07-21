@@ -425,6 +425,40 @@ def count_bot_users(path: str | None = None) -> int:
     return n
 
 
+def get_all_telegram_users(path: str | None = None) -> list:
+    """All unique Telegram users: from bot_users + from complaints (merged)."""
+    p = path or DB_PATH
+    conn = sqlite3.connect(p)
+    cur = conn.cursor()
+
+    cur.execute("SELECT user_id, username, user_full_name, first_seen, last_seen FROM bot_users")
+    users: dict[int, dict] = {}
+    for r in cur.fetchall():
+        users[r[0]] = {
+            'user_id': r[0], 'username': r[1], 'full_name': r[2],
+            'first_seen': r[3], 'last_seen': r[4], 'source': 'bot',
+        }
+
+    cur.execute("""
+        SELECT user_id, username, user_full_name
+        FROM complaints
+        WHERE user_id IS NOT NULL AND user_id != 0
+        GROUP BY user_id
+    """)
+    for r in cur.fetchall():
+        uid = r[0]
+        if uid not in users:
+            users[uid] = {
+                'user_id': uid, 'username': r[1], 'full_name': r[2],
+                'first_seen': None, 'last_seen': None, 'source': 'complaint',
+            }
+        else:
+            users[uid]['source'] = 'both'
+
+    conn.close()
+    return sorted(users.values(), key=lambda u: u['first_seen'] or '', reverse=True)
+
+
 def count_messages_for_complaint(complaint_id: int, path: str | None = None) -> int:
     """Количество сообщений по жалобе."""
     p = path or DB_PATH
