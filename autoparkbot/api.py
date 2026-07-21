@@ -955,3 +955,81 @@ async def send_chat_message_form(
 
     # Редирект обратно в чат
     return RedirectResponse(url=f'/chat/{complaint_id}', status_code=302)
+
+
+# ─── Superadmin ───────────────────────────────────────────────────────────────
+
+async def _tg_send(client: httpx.AsyncClient, token: str, user_id: int,
+                   text: str, sem: asyncio.Semaphore) -> bool:
+    async with sem:
+        try:
+            r = await client.post(
+                f'https://api.telegram.org/bot{token}/sendMessage',
+                json={'chat_id': user_id, 'text': text, 'parse_mode': 'HTML'},
+                timeout=8,
+            )
+            return r.json().get('ok', False)
+        except Exception:
+            return False
+
+
+@app.get('/superadmin/users')
+async def superadmin_users():
+    users = db.get_bot_users()
+    return {'total': len(users), 'users': users}
+
+
+@app.post('/superadmin/broadcast')
+async def superadmin_broadcast(text: str = Form(...)):
+    if not text.strip():
+        raise HTTPException(status_code=400, detail='Текст не может быть пустым')
+    users = db.get_bot_users()
+    if not users:
+        return {'success': 0, 'failed': 0, 'total': 0}
+    token = os.getenv('TELEGRAM_TOKEN', '')
+    sem = asyncio.Semaphore(10)
+    async with httpx.AsyncClient() as client:
+        results = await asyncio.gather(*[
+            _tg_send(client, token, u['user_id'], text, sem)
+            for u in users
+        ])
+    success = sum(1 for r in results if r)
+    return {'success': success, 'failed': len(results) - success, 'total': len(results)}
+
+
+# ─── 2GIS Reviews proxy ───────────────────────────────────────────────────────
+_TWOGIS_SESSION_TOKEN = os.getenv('TWOGIS_SESSION_TOKEN', '')
+_TWOGIS_REFRESH_TOKEN = os.getenv('TWOGIS_REFRESH_TOKEN', '')
+_TWOGIS_SESSION_ID    = os.getenv('TWOGIS_SESSION_ID', '')
+_TWOGIS_BRANCH_ID     = os.getenv('TWOGIS_BRANCH_ID', '70000001018076362')
+
+@app.get('/reviews/2gis')
+async def reviews_2gis(limit: int = 20, offset: int = 0):
+    url = (
+        f'https://api.account.2gis.com/api/1.0/presence/branch/'
+        f'{_TWOGIS_BRANCH_ID}/reviews'
+    )
+    params = {'pinRequestedFirst': 'false', 'limit': limit, 'offset': offset}
+    cookies = {
+        'dg_session_token': _TWOGIS_SESSION_TOKEN,
+        'dg_refresh_token': _TWOGIS_REFRESH_TOKEN,
+        'dg_session_id':    _TWOGIS_SESSION_ID,
+    }
+    # Prevent 304 Not Modified: tell 2GIS we have no cached version
+    headers = {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Accept': 'application/json',
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            resp = await client.get(url, params=params, cookies=cookies, headers=headers)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f'2GIS unreachable: {exc}')
+    if resp.status_code == 304:
+        raise HTTPException(status_code=503,
+                            detail='2GIS вернул 304: токен сессии истёк, обновите dg_session_token в .env')
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code,
+                            detail=f'2GIS API: {resp.text[:300]}')
+    return resp.json()

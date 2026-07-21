@@ -204,6 +204,12 @@ def _lang(ctx: ContextTypes.DEFAULT_TYPE, key: str, **kwargs):
 
 async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Приветствие + постоянная кнопка-команда внизу чата."""
+    tg_user = update.effective_user
+    db.save_bot_user(
+        user_id=tg_user.id,
+        username=tg_user.username,
+        full_name=tg_user.full_name,
+    )
     # Используем /жалоба как команду — не всплывает как обычный текст
     keyboard = ReplyKeyboardMarkup(
         [[KeyboardButton('/new')]],

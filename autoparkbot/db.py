@@ -70,6 +70,16 @@ def init_db(path: str | None = None):
         except Exception:
             pass
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS bot_users (
+            user_id        INTEGER PRIMARY KEY,
+            username       TEXT,
+            user_full_name TEXT,
+            first_seen     TEXT,
+            last_seen      TEXT
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -369,6 +379,50 @@ def get_messages_for_complaint(complaint_id: int, limit: int = 100, offset: int 
     rows = cur.fetchall()
     conn.close()
     return rows
+
+
+def save_bot_user(user_id: int, username: str | None, full_name: str | None, path: str | None = None):
+    p = path or DB_PATH
+    conn = sqlite3.connect(p)
+    cur = conn.cursor()
+    now = datetime.utcnow().isoformat()
+    cur.execute("""
+        INSERT INTO bot_users (user_id, username, user_full_name, first_seen, last_seen)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            username=excluded.username,
+            user_full_name=excluded.user_full_name,
+            last_seen=excluded.last_seen
+    """, (user_id, username, full_name, now, now))
+    conn.commit()
+    conn.close()
+
+
+def get_bot_users(path: str | None = None) -> list:
+    p = path or DB_PATH
+    conn = sqlite3.connect(p)
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT user_id, username, user_full_name, first_seen, last_seen
+        FROM bot_users ORDER BY first_seen DESC
+    """)
+    rows = cur.fetchall()
+    conn.close()
+    return [
+        {'user_id': r[0], 'username': r[1], 'full_name': r[2],
+         'first_seen': r[3], 'last_seen': r[4]}
+        for r in rows
+    ]
+
+
+def count_bot_users(path: str | None = None) -> int:
+    p = path or DB_PATH
+    conn = sqlite3.connect(p)
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM bot_users")
+    n = cur.fetchone()[0]
+    conn.close()
+    return n
 
 
 def count_messages_for_complaint(complaint_id: int, path: str | None = None) -> int:

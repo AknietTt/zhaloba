@@ -5,7 +5,6 @@
 import logging
 import os
 import re
-
 from openai import AsyncOpenAI
 
 import db

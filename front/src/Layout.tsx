@@ -7,9 +7,10 @@ interface Props {
   children: React.ReactNode;
   title: string;
   breadcrumb?: string;
+  role?: string;
 }
 
-export default function Layout({ user, onLogout, children, title, breadcrumb }: Props) {
+export default function Layout({ user, onLogout, children, title, breadcrumb, role }: Props) {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -20,7 +21,6 @@ export default function Layout({ user, onLogout, children, title, breadcrumb }: 
 
   return (
     <div className="layout">
-      {/* Overlay for mobile */}
       {sidebarOpen && (
         <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
       )}
@@ -33,14 +33,32 @@ export default function Layout({ user, onLogout, children, title, breadcrumb }: 
 
         <nav className="sidebar-nav">
           <div className="nav-section-label">Навигация</div>
-          <NavLink to="/complaints" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
-            onClick={() => setSidebarOpen(false)}>
-            <span className="nav-icon">📋</span> Жалобы
-          </NavLink>
-          <NavLink to="/stats" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
-            onClick={() => setSidebarOpen(false)}>
-            <span className="nav-icon">📊</span> Статистика
-          </NavLink>
+
+          {role === 'admin' ? (
+            <NavLink to="/superadmin"
+              className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+              onClick={() => setSidebarOpen(false)}>
+              <span className="nav-icon">👥</span> Пользователи
+            </NavLink>
+          ) : (
+            <>
+              <NavLink to="/complaints"
+                className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+                onClick={() => setSidebarOpen(false)}>
+                <span className="nav-icon">📋</span> Жалобы
+              </NavLink>
+              <NavLink to="/stats"
+                className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+                onClick={() => setSidebarOpen(false)}>
+                <span className="nav-icon">📊</span> Статистика
+              </NavLink>
+              <NavLink to="/reviews"
+                className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+                onClick={() => setSidebarOpen(false)}>
+                <span className="nav-icon">⭐</span> 2GIS Отзывы
+              </NavLink>
+            </>
+          )}
         </nav>
 
         <div className="sidebar-footer">
