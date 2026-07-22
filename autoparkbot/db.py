@@ -80,6 +80,14 @@ def init_db(path: str | None = None):
         )
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            key        TEXT PRIMARY KEY,
+            value      TEXT,
+            updated_at TEXT
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -379,6 +387,28 @@ def get_messages_for_complaint(complaint_id: int, limit: int = 100, offset: int 
     rows = cur.fetchall()
     conn.close()
     return rows
+
+
+def get_setting(key: str, path: str | None = None) -> str | None:
+    p = path or DB_PATH
+    conn = sqlite3.connect(p)
+    cur = conn.cursor()
+    cur.execute("SELECT value FROM settings WHERE key = ?", (key,))
+    row = cur.fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+def set_setting(key: str, value: str, path: str | None = None):
+    p = path or DB_PATH
+    conn = sqlite3.connect(p)
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+    """, (key, value, datetime.utcnow().isoformat()))
+    conn.commit()
+    conn.close()
 
 
 def save_bot_user(user_id: int, username: str | None, full_name: str | None, path: str | None = None):

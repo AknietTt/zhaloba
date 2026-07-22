@@ -2,6 +2,7 @@ import os
 import uuid
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import List, Optional
 
@@ -21,7 +22,77 @@ from fastapi.staticfiles import StaticFiles
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title='Complaint API')
+# ─── 2GIS live token store (DB > env) ─────────────────────────────────────────
+_2gis_tokens: dict[str, str] = {
+    'session_token': os.getenv('TWOGIS_SESSION_TOKEN', ''),
+    'refresh_token':  os.getenv('TWOGIS_REFRESH_TOKEN', ''),
+    'session_id':     os.getenv('TWOGIS_SESSION_ID', ''),
+    'branch_id':      os.getenv('TWOGIS_BRANCH_ID', '70000001018076362'),
+}
+
+def _load_2gis_tokens_from_db():
+    for key, env_key in (
+        ('session_token', 'TWOGIS_SESSION_TOKEN'),
+        ('refresh_token',  'TWOGIS_REFRESH_TOKEN'),
+        ('session_id',     'TWOGIS_SESSION_ID'),
+        ('branch_id',      'TWOGIS_BRANCH_ID'),
+    ):
+        val = db.get_setting(f'2gis_{key}')
+        if val:
+            _2gis_tokens[key] = val
+
+async def _try_refresh_2gis_tokens() -> bool:
+    rt  = _2gis_tokens['refresh_token']
+    sid = _2gis_tokens['session_id']
+    st  = _2gis_tokens['session_token']
+    if not rt:
+        return False
+    cookies_in = {'dg_refresh_token': rt, 'dg_session_id': sid, 'dg_session_token': st}
+    hdrs = {'Cache-Control': 'no-cache', 'Accept': 'application/json'}
+    candidates = [
+        ('POST', 'https://api.account.2gis.com/api/1.0/auth/token/refresh'),
+        ('GET',  'https://api.account.2gis.com/api/1.0/auth/session/refresh'),
+        ('POST', 'https://api.account.2gis.com/api/1.0/auth/session'),
+    ]
+    async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+        for method, url in candidates:
+            try:
+                fn = client.post if method == 'POST' else client.get
+                resp = await fn(url, cookies=cookies_in, headers=hdrs)
+                if resp.status_code == 200:
+                    new_st  = resp.cookies.get('dg_session_token')
+                    new_rt  = resp.cookies.get('dg_refresh_token')
+                    new_sid = resp.cookies.get('dg_session_id')
+                    updated = False
+                    for k, v in (('session_token', new_st), ('refresh_token', new_rt), ('session_id', new_sid)):
+                        if v:
+                            _2gis_tokens[k] = v
+                            db.set_setting(f'2gis_{k}', v)
+                            updated = True
+                    if updated:
+                        logger.info('2GIS tokens refreshed via %s', url)
+                        return True
+            except Exception as exc:
+                logger.debug('2GIS refresh attempt %s failed: %s', url, exc)
+    logger.warning('2GIS auto-refresh failed on all endpoints')
+    return False
+
+async def _token_refresh_loop():
+    """Refresh 2GIS tokens every 30 minutes in background."""
+    while True:
+        await asyncio.sleep(30 * 60)
+        try:
+            await _try_refresh_2gis_tokens()
+        except Exception as exc:
+            logger.warning('Background 2GIS refresh error: %s', exc)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _load_2gis_tokens_from_db()
+    asyncio.create_task(_token_refresh_loop())
+    yield
+
+app = FastAPI(title='Complaint API', lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -1005,38 +1076,66 @@ async def superadmin_broadcast(text: str = Form(...)):
 
 
 # ─── 2GIS Reviews proxy ───────────────────────────────────────────────────────
-_TWOGIS_SESSION_TOKEN = os.getenv('TWOGIS_SESSION_TOKEN', '')
-_TWOGIS_REFRESH_TOKEN = os.getenv('TWOGIS_REFRESH_TOKEN', '')
-_TWOGIS_SESSION_ID    = os.getenv('TWOGIS_SESSION_ID', '')
-_TWOGIS_BRANCH_ID     = os.getenv('TWOGIS_BRANCH_ID', '70000001018076362')
 
 @app.get('/reviews/2gis')
 async def reviews_2gis(limit: int = 20, offset: int = 0):
-    url = (
-        f'https://api.account.2gis.com/api/1.0/presence/branch/'
-        f'{_TWOGIS_BRANCH_ID}/reviews'
-    )
+    branch_id = _2gis_tokens['branch_id']
+    url = f'https://api.account.2gis.com/api/1.0/presence/branch/{branch_id}/reviews'
     params = {'pinRequestedFirst': 'false', 'limit': limit, 'offset': offset}
-    cookies = {
-        'dg_session_token': _TWOGIS_SESSION_TOKEN,
-        'dg_refresh_token': _TWOGIS_REFRESH_TOKEN,
-        'dg_session_id':    _TWOGIS_SESSION_ID,
+    headers = {'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'Accept': 'application/json'}
+
+    for attempt in range(2):
+        cookies = {
+            'dg_session_token': _2gis_tokens['session_token'],
+            'dg_refresh_token': _2gis_tokens['refresh_token'],
+            'dg_session_id':    _2gis_tokens['session_id'],
+        }
+        try:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+                resp = await client.get(url, params=params, cookies=cookies, headers=headers)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f'2GIS unreachable: {exc}')
+
+        if resp.status_code == 200:
+            return resp.json()
+
+        if resp.status_code in (304, 401, 403) and attempt == 0:
+            logger.info('2GIS returned %s, trying auto-refresh...', resp.status_code)
+            refreshed = await _try_refresh_2gis_tokens()
+            if refreshed:
+                continue
+
+        # All attempts exhausted
+        raise HTTPException(
+            status_code=503,
+            detail='Токен 2GIS истёк. Обновите токены в панели суперадмина → 2GIS Токены.',
+        )
+
+    raise HTTPException(status_code=503, detail='Токен 2GIS истёк. Обновите в панели суперадмина.')
+
+
+@app.post('/superadmin/2gis-tokens')
+async def update_2gis_tokens(
+    session_token: str = Form(...),
+    refresh_token: str = Form(...),
+    session_id:    str = Form(...),
+):
+    for key, val in (
+        ('session_token', session_token.strip()),
+        ('refresh_token',  refresh_token.strip()),
+        ('session_id',     session_id.strip()),
+    ):
+        _2gis_tokens[key] = val
+        db.set_setting(f'2gis_{key}', val)
+    logger.info('2GIS tokens updated via admin panel')
+    return {'ok': True}
+
+
+@app.get('/superadmin/2gis-tokens')
+async def get_2gis_token_status():
+    st = _2gis_tokens['session_token']
+    return {
+        'session_token_hint': f'...{st[-8:]}' if len(st) > 8 else '—',
+        'session_id': _2gis_tokens['session_id'],
+        'has_refresh': bool(_2gis_tokens['refresh_token']),
     }
-    # Prevent 304 Not Modified: tell 2GIS we have no cached version
-    headers = {
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Accept': 'application/json',
-    }
-    try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            resp = await client.get(url, params=params, cookies=cookies, headers=headers)
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f'2GIS unreachable: {exc}')
-    if resp.status_code == 304:
-        raise HTTPException(status_code=503,
-                            detail='2GIS вернул 304: токен сессии истёк, обновите dg_session_token в .env')
-    if resp.status_code != 200:
-        raise HTTPException(status_code=resp.status_code,
-                            detail=f'2GIS API: {resp.text[:300]}')
-    return resp.json()
