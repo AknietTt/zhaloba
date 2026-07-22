@@ -264,11 +264,41 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return CATEGORY
 
 
+_LOST_MSG = {
+    'ru': (
+        "🎒 *Потеряли вещь в автобусе?*\n\n"
+        "Позвоните напрямую в диспетчерскую автопарка:\n\n"
+        "📞 *+7 (7172) 54‑16‑45*\n\n"
+        "Диспетчер поможет найти вашу вещь."
+    ),
+    'kk': (
+        "🎒 *Автобуста зат жоғалттыңыз ба?*\n\n"
+        "Автопарктің диспетчерлік қызметіне тікелей хабарласыңыз:\n\n"
+        "📞 *+7 (7172) 54‑16‑45*\n\n"
+        "Диспетчер затыңызды табуға көмектеседі."
+    ),
+    'en': (
+        "🎒 *Lost something on the bus?*\n\n"
+        "Please call the depot dispatch directly:\n\n"
+        "📞 *+7 (7172) 54‑16‑45*\n\n"
+        "The dispatcher will help you find your item."
+    ),
+}
+
 async def category_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Save category and proceed to route."""
+    """Save category and proceed to route (or short-circuit for lost items)."""
     query = update.callback_query
     await query.answer()
-    context.user_data['category'] = query.data[4:]  # strip 'cat_'
+    category = query.data[4:]  # strip 'cat_'
+    context.user_data['category'] = category
+
+    if category == 'lost':
+        lang = context.user_data.get('lang', 'ru')
+        msg = _LOST_MSG.get(lang, _LOST_MSG['ru'])
+        await query.edit_message_text(msg, parse_mode='Markdown')
+        context.user_data.clear()
+        return ConversationHandler.END
+
     await query.edit_message_text(_lang(context, 'enter_route'))
     return ROUTE
 
