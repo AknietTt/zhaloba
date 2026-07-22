@@ -88,6 +88,16 @@ def init_db(path: str | None = None):
         )
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS start_events (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id   INTEGER NOT NULL,
+            timestamp TEXT    NOT NULL
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_se_ts   ON start_events(timestamp)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_se_user ON start_events(user_id)")
+
     conn.commit()
     conn.close()
 
@@ -409,6 +419,57 @@ def set_setting(key: str, value: str, path: str | None = None):
     """, (key, value, datetime.utcnow().isoformat()))
     conn.commit()
     conn.close()
+
+
+def record_start_event(user_id: int, path: str | None = None):
+    p = path or DB_PATH
+    conn = sqlite3.connect(p)
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO start_events (user_id, timestamp) VALUES (?, ?)",
+        (user_id, datetime.utcnow().isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_growth_stats(period: str = 'month', path: str | None = None) -> list:
+    fmt_map = {
+        'day':   ('%Y-%m-%d', 30),
+        'week':  ('%Y-W%W',   16),
+        'month': ('%Y-%m',    12),
+        'year':  ('%Y',        5),
+    }
+    fmt, limit = fmt_map.get(period, ('%Y-%m', 12))
+    p = path or DB_PATH
+    conn = sqlite3.connect(p)
+    cur = conn.cursor()
+
+    cur.execute(f"""
+        SELECT strftime('{fmt}', first_seen) as per, COUNT(*) as cnt
+        FROM bot_users
+        WHERE first_seen IS NOT NULL
+        GROUP BY per
+        ORDER BY per DESC
+        LIMIT {limit}
+    """)
+    new_users = {r[0]: r[1] for r in cur.fetchall()}
+
+    cur.execute(f"""
+        SELECT strftime('{fmt}', timestamp) as per, COUNT(*) as cnt
+        FROM start_events
+        GROUP BY per
+        ORDER BY per DESC
+        LIMIT {limit}
+    """)
+    starts = {r[0]: r[1] for r in cur.fetchall()}
+
+    all_periods = sorted(set(new_users) | set(starts), reverse=True)[:limit]
+    conn.close()
+    return [
+        {'period': per, 'new_users': new_users.get(per, 0), 'starts': starts.get(per, 0)}
+        for per in all_periods
+    ]
 
 
 def save_bot_user(user_id: int, username: str | None, full_name: str | None, path: str | None = None):

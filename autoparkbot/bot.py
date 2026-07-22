@@ -210,6 +210,7 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         username=tg_user.username,
         full_name=tg_user.full_name,
     )
+    db.record_start_event(user_id=tg_user.id)
     # Используем /жалоба как команду — не всплывает как обычный текст
     keyboard = ReplyKeyboardMarkup(
         [[KeyboardButton('/new')]],

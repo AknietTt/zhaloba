@@ -1139,3 +1139,11 @@ async def get_2gis_token_status():
         'session_id': _2gis_tokens['session_id'],
         'has_refresh': bool(_2gis_tokens['refresh_token']),
     }
+
+
+@app.get('/superadmin/growth')
+async def superadmin_growth(period: str = 'month'):
+    if period not in ('day', 'week', 'month', 'year'):
+        period = 'month'
+    data = db.get_growth_stats(period)
+    return {'period': period, 'data': data}

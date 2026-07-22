@@ -31,6 +31,14 @@ interface TokenStatus {
   has_refresh: boolean;
 }
 
+type PeriodType = 'day' | 'week' | 'month' | 'year';
+
+interface GrowthPoint {
+  period: string;
+  new_users: number;
+  starts: number;
+}
+
 interface Props { user: string; onLogout: () => void; }
 
 function fmtDate(iso: string | null) {
@@ -39,6 +47,21 @@ function fmtDate(iso: string | null) {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
+}
+
+function formatPeriod(p: string, type: PeriodType): string {
+  if (type === 'day') {
+    return new Date(p + 'T00:00:00').toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
+  }
+  if (type === 'week') {
+    const [y, w] = p.split('-W');
+    return `Нед. ${w}, ${y}`;
+  }
+  if (type === 'month') {
+    const [y, m] = p.split('-');
+    return new Date(+y, +m - 1).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' });
+  }
+  return p;
 }
 
 const SOURCE_LABEL: Record<Source, string> = {
@@ -67,6 +90,9 @@ export default function SuperAdminPage({ user, onLogout }: Props) {
   const [tkSessionId, setTkSessionId]       = useState('');
   const [tkSaving, setTkSaving]             = useState(false);
   const [tkMsg, setTkMsg]                   = useState('');
+  const [period, setPeriod]                 = useState<PeriodType>('month');
+  const [growth, setGrowth]                 = useState<GrowthPoint[]>([]);
+  const [growthLoading, setGL]              = useState(false);
 
   useEffect(() => {
     fetch('/superadmin/users')
@@ -80,6 +106,15 @@ export default function SuperAdminPage({ user, onLogout }: Props) {
       .then(d => setTokenStatus(d as TokenStatus))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    setGL(true);
+    fetch(`/superadmin/growth?period=${period}`)
+      .then(r => r.json())
+      .then(d => setGrowth((d.data as GrowthPoint[]).slice().reverse()))
+      .catch(() => setGrowth([]))
+      .finally(() => setGL(false));
+  }, [period]);
 
   const handleTokenSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -155,6 +190,75 @@ export default function SuperAdminPage({ user, onLogout }: Props) {
           <div className="kpi-icon">💬</div>
           <div className="kpi-value">{loading ? '…' : cmpCount}</div>
           <div className="kpi-label">Подали жалобу</div>
+        </div>
+      </div>
+
+      {/* Growth chart */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-header">
+          <h3>📈 Рост пользователей</h3>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {(['day', 'week', 'month', 'year'] as const).map(p => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={`btn btn-sm${period === p ? ' btn-primary' : ' btn-outline'}`}
+              >
+                {p === 'day' ? 'День' : p === 'week' ? 'Неделя' : p === 'month' ? 'Месяц' : 'Год'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="card-body">
+          {growthLoading && (
+            <div style={{ color: 'var(--ink-4)', fontSize: 13 }}>Загрузка...</div>
+          )}
+          {!growthLoading && growth.length === 0 && (
+            <div style={{ color: 'var(--ink-4)', textAlign: 'center', padding: '20px 0', fontSize: 13 }}>
+              Данных пока нет — статистика появится после нажатий /start.
+            </div>
+          )}
+          {!growthLoading && growth.length > 0 && (() => {
+            const maxNew = Math.max(...growth.map(g => g.new_users), 1);
+            const maxSt  = Math.max(...growth.map(g => g.starts), 1);
+            return (
+              <div>
+                <div style={{ display: 'flex', gap: 16, marginBottom: 12, fontSize: 11, color: 'var(--ink-4)' }}>
+                  <span>
+                    <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: 'var(--brand)', marginRight: 4, verticalAlign: 'middle' }} />
+                    Новые пользователи
+                  </span>
+                  <span>
+                    <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: 'oklch(0.55 0.14 155)', marginRight: 4, verticalAlign: 'middle' }} />
+                    Нажатий /start
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {growth.map(g => (
+                    <div key={g.period} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                      <div style={{ width: 80, textAlign: 'right', color: 'var(--ink-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 11, flexShrink: 0 }}>
+                        {formatPeriod(g.period, period)}
+                      </div>
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ flex: 1, background: 'var(--border)', borderRadius: 3, height: 9, overflow: 'hidden' }}>
+                            <div style={{ width: `${Math.round(g.new_users / maxNew * 100)}%`, height: '100%', background: 'var(--brand)', borderRadius: 3 }} />
+                          </div>
+                          <div style={{ width: 26, textAlign: 'right', color: 'var(--brand)', fontWeight: 700, fontSize: 11 }}>{g.new_users}</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ flex: 1, background: 'var(--border)', borderRadius: 3, height: 9, overflow: 'hidden' }}>
+                            <div style={{ width: `${Math.round(g.starts / maxSt * 100)}%`, height: '100%', background: 'oklch(0.55 0.14 155)', borderRadius: 3 }} />
+                          </div>
+                          <div style={{ width: 26, textAlign: 'right', color: 'oklch(0.55 0.14 155)', fontWeight: 700, fontSize: 11 }}>{g.starts}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
