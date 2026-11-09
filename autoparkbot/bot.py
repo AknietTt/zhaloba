@@ -258,10 +258,16 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(labels[lang], callback_data=f'cat_{code}')]
         for code, labels in CATEGORIES
     ]
-    await query.edit_message_text(
-        _lang(context, 'choose_category'),
-        reply_markup=InlineKeyboardMarkup(keyboard),
-    )
+    markup = InlineKeyboardMarkup(keyboard)
+    text = _lang(context, 'choose_category')
+
+    try:
+        await query.edit_message_text(text, reply_markup=markup)
+    except Exception as e:
+        # edit_message_text fails if message is old/already edited — send new message instead
+        logger.warning('edit_message_text failed (%s), sending new message', e)
+        await query.message.reply_text(text, reply_markup=markup)
+
     return CATEGORY
 
 
@@ -702,6 +708,18 @@ async def list_complaints(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines))
 
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log all errors and notify user if possible."""
+    logger.error('Exception while handling update:', exc_info=context.error)
+    if isinstance(update, Update) and update.effective_message:
+        try:
+            await update.effective_message.reply_text(
+                '⚠️ Произошла ошибка. Нажмите /new чтобы начать заново.'
+            )
+        except Exception:
+            pass
+
+
 async def log_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Log every incoming update without blocking other handlers."""
     if update.message:
@@ -725,7 +743,8 @@ def main():
     db.init_db()
 
     app = ApplicationBuilder().token(token).build()
-    
+    app.add_error_handler(error_handler)
+
     # Add debug logging for all updates after normal handlers
     app.add_handler(MessageHandler(filters.ALL, log_update), group=99)
     app.add_handler(CallbackQueryHandler(log_update), group=99)
