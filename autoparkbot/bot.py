@@ -261,13 +261,13 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     markup = InlineKeyboardMarkup(keyboard)
     text = _lang(context, 'choose_category')
 
+    # Always send a new message so categories appear at the bottom of chat,
+    # not on a stale scrolled-up message
     try:
-        await query.edit_message_text(text, reply_markup=markup)
-    except Exception as e:
-        # edit_message_text fails if message is old/already edited — send new message instead
-        logger.warning('edit_message_text failed (%s), sending new message', e)
-        await query.message.reply_text(text, reply_markup=markup)
-
+        await query.message.delete()
+    except Exception:
+        pass
+    await query.message.chat.send_message(text, reply_markup=markup)
     return CATEGORY
 
 
@@ -302,11 +302,19 @@ async def category_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if category == 'lost':
         lang = context.user_data.get('language', 'ru')
         msg = _LOST_MSG.get(lang, _LOST_MSG['ru'])
-        await query.edit_message_text(msg, parse_mode='Markdown')
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.chat.send_message(msg, parse_mode='Markdown')
         context.user_data.clear()
         return ConversationHandler.END
 
-    await query.edit_message_text(_lang(context, 'enter_route'))
+    try:
+        await query.message.delete()
+    except Exception:
+        pass
+    await query.message.chat.send_message(_lang(context, 'enter_route'))
     return ROUTE
 
 
