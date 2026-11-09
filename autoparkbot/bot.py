@@ -756,6 +756,16 @@ def main():
     app = ApplicationBuilder().token(token).build()
     app.add_error_handler(error_handler)
 
+    # Nuclear debug: fires BEFORE everything else (group -1) to prove callbacks reach the bot
+    async def nuclear_debug(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.callback_query:
+            logger.info(f"[NUCLEAR] CB received: user={update.effective_user.id} data={update.callback_query.data}")
+        elif update.message:
+            logger.info(f"[NUCLEAR] MSG received: user={update.effective_user.id} text={update.message.text}")
+
+    app.add_handler(MessageHandler(filters.ALL, nuclear_debug), group=-1)
+    app.add_handler(CallbackQueryHandler(nuclear_debug), group=-1)
+
     # Add debug logging for all updates after normal handlers
     app.add_handler(MessageHandler(filters.ALL, log_update), group=99)
     app.add_handler(CallbackQueryHandler(log_update), group=99)
@@ -805,7 +815,7 @@ def main():
     logger.info("Handlers registered successfully")
     logger.info('Bot started...')
     print('Bot started...')
-    app.run_polling()
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == '__main__':
