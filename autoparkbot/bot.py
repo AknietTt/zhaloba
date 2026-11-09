@@ -248,11 +248,13 @@ async def complaint_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Set language and proceed to category selection."""
     query = update.callback_query
+    logger.info(f"set_language called: user={update.effective_user.id} data={query.data}")
     await query.answer()
 
     lang_map = {'lang_en': 'en', 'lang_ru': 'ru', 'lang_kk': 'kk'}
     lang = lang_map.get(query.data, 'en')
     context.user_data['language'] = lang
+    logger.info(f"Language set to '{lang}' for user {update.effective_user.id}")
 
     keyboard = [
         [InlineKeyboardButton(labels[lang], callback_data=f'cat_{code}')]
@@ -261,13 +263,12 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     markup = InlineKeyboardMarkup(keyboard)
     text = _lang(context, 'choose_category')
 
-    # Always send a new message so categories appear at the bottom of chat,
-    # not on a stale scrolled-up message
     try:
         await query.message.delete()
     except Exception:
         pass
-    await query.message.chat.send_message(text, reply_markup=markup)
+    await context.bot.send_message(chat_id=query.message.chat_id, text=text, reply_markup=markup)
+    logger.info(f"Category keyboard sent to user {update.effective_user.id}")
     return CATEGORY
 
 
@@ -295,6 +296,7 @@ _LOST_MSG = {
 async def category_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save category and proceed to route (or short-circuit for lost items)."""
     query = update.callback_query
+    logger.info(f"category_selected called: user={update.effective_user.id} data={query.data}")
     await query.answer()
     category = query.data[4:]  # strip 'cat_'
     context.user_data['category'] = category
@@ -306,7 +308,7 @@ async def category_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.delete()
         except Exception:
             pass
-        await query.message.chat.send_message(msg, parse_mode='Markdown')
+        await context.bot.send_message(chat_id=query.message.chat_id, text=msg, parse_mode='Markdown')
         context.user_data.clear()
         return ConversationHandler.END
 
@@ -314,7 +316,8 @@ async def category_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.delete()
     except Exception:
         pass
-    await query.message.chat.send_message(_lang(context, 'enter_route'))
+    await context.bot.send_message(chat_id=query.message.chat_id, text=_lang(context, 'enter_route'))
+    logger.info(f"Route prompt sent to user {update.effective_user.id}")
     return ROUTE
 
 
@@ -760,20 +763,10 @@ def main():
     # /start → меню, /complaint → сразу жалоба
     app.add_handler(CommandHandler('start', show_menu))
 
-    async def stale_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handles callbacks that arrive when conversation state is lost (e.g. after bot restart)."""
-        query = update.callback_query
-        await query.answer('Сессия устарела. Нажмите /new чтобы начать заново.', show_alert=False)
-        return ConversationHandler.END
-
     conv = ConversationHandler(
         entry_points=[
             CommandHandler('complaint', complaint_start),
             CommandHandler('new',      complaint_start),
-            # Catch stale lang_ callbacks (pressed after bot restart)
-            CallbackQueryHandler(stale_callback, pattern='^lang_(en|ru|kk)$'),
-            CallbackQueryHandler(stale_callback, pattern='^cat_'),
-            CallbackQueryHandler(stale_callback, pattern='^(skip_photo|confirm_(yes|no))$'),
         ],
         states={
             LANGUAGE: [
