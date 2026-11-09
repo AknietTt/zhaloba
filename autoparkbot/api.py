@@ -1099,16 +1099,17 @@ async def reviews_2gis(limit: int = 20, offset: int = 0):
         if resp.status_code == 200:
             return resp.json()
 
-        if resp.status_code in (304, 401, 403) and attempt == 0:
+        if resp.status_code in (300, 301, 302, 304, 401, 403) and attempt == 0:
             logger.info('2GIS returned %s, trying auto-refresh...', resp.status_code)
             refreshed = await _try_refresh_2gis_tokens()
             if refreshed:
                 continue
 
-        # All attempts exhausted
+        # All attempts exhausted — log the actual status for debugging
+        logger.warning('2GIS reviews failed with HTTP %s after %d attempt(s)', resp.status_code, attempt + 1)
         raise HTTPException(
             status_code=503,
-            detail='Токен 2GIS истёк. Обновите токены в панели суперадмина → 2GIS Токены.',
+            detail=f'Токен 2GIS истёк (2GIS вернул {resp.status_code}). Обновите токены в панели суперадмина → 2GIS Токены.',
         )
 
     raise HTTPException(status_code=503, detail='Токен 2GIS истёк. Обновите в панели суперадмина.')

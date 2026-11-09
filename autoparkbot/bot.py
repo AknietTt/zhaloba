@@ -294,7 +294,7 @@ async def category_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['category'] = category
 
     if category == 'lost':
-        lang = context.user_data.get('lang', 'ru')
+        lang = context.user_data.get('language', 'ru')
         msg = _LOST_MSG.get(lang, _LOST_MSG['ru'])
         await query.edit_message_text(msg, parse_mode='Markdown')
         context.user_data.clear()
@@ -708,6 +708,11 @@ async def log_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"📨 Message from {update.effective_user.id}: {update.message.text}")
     if update.callback_query:
         logger.info(f"🔘 Callback from {update.effective_user.id}: {update.callback_query.data}")
+        # Always answer unhandled callbacks so buttons don't freeze
+        try:
+            await update.callback_query.answer()
+        except Exception:
+            pass
 
 
 def main():
@@ -728,10 +733,20 @@ def main():
     # /start → меню, /complaint → сразу жалоба
     app.add_handler(CommandHandler('start', show_menu))
 
+    async def stale_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handles callbacks that arrive when conversation state is lost (e.g. after bot restart)."""
+        query = update.callback_query
+        await query.answer('Сессия устарела. Нажмите /new чтобы начать заново.', show_alert=False)
+        return ConversationHandler.END
+
     conv = ConversationHandler(
         entry_points=[
             CommandHandler('complaint', complaint_start),
             CommandHandler('new',      complaint_start),
+            # Catch stale lang_ callbacks (pressed after bot restart)
+            CallbackQueryHandler(stale_callback, pattern='^lang_(en|ru|kk)$'),
+            CallbackQueryHandler(stale_callback, pattern='^cat_'),
+            CallbackQueryHandler(stale_callback, pattern='^(skip_photo|confirm_(yes|no))$'),
         ],
         states={
             LANGUAGE: [
